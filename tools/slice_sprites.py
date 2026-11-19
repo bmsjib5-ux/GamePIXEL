@@ -349,6 +349,11 @@ for group, base in BASE_NAMES.items():
             new_strips.append(lineup(src + "_back.png", [n + "_back" for n in names], cell, cell, "monsters",
                                      f"{group}_{stage}_back_{cell}x{cell}.png", 28, match=names))
 
+# The legendary monster: one sprite on its own sheet, front view only, in a final-form cell.
+if os.path.exists(os.path.join(SRC, "monsters_legend.png")):
+    new_strips.append(lineup("monsters_legend.png", ["legend_sky_elephant"], 88, 88, "monsters",
+                             "legend_88x88.png", 40, each=True))
+
 walk_strips = [np.hstack([s[i * H:(i + 1) * H] for i in range(4)]) for s in [sheet] + npc_walks]
 strips = walk_strips + [npc_large, np.hstack([starters, wild])]
 if len(backs) == 2:

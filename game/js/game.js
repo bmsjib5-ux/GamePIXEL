@@ -52,7 +52,10 @@
     for (const n of Object.keys(SPRITE_META.objects)) names.push('objects/' + n);
     for (const n of Object.keys(SPRITE_META.buildings)) names.push('buildings/' + n);
     for (const n of Object.keys(SPRITE_META.furniture)) names.push('furniture/' + n);
-    for (const sp of Object.values(SPECIES)) names.push('monsters/' + sp.img, 'monsters/' + sp.img + '_back');
+    for (const sp of Object.values(SPECIES)) {
+      names.push('monsters/' + sp.img);
+      if (!sp.frontOnly) names.push('monsters/' + sp.img + '_back');
+    }
     return names;
   }
 
@@ -95,7 +98,7 @@
   }
   // types this type hits hard / hits weakly / is hit hard by / shrugs off
   const typeLinks = (type) => {
-    const all = Object.keys(TYPES);
+    const all = Object.keys(TYPES).filter((t) => !TYPES[t].hidden);
     return { beats: all.filter((d) => typeMult(type, d) > 1), weakTo: all.filter((a) => typeMult(a, type) > 1),
              resists: all.filter((a) => typeMult(a, type) < 1) };
   };
@@ -540,6 +543,14 @@
         save();
         return;
       }
+      if (G.flags.legendMet && !G.flags.legendTold) {
+        G.flags.legendTold = true;
+        await say('อะไรนะ! เธอเห็นช้างเผือกลอยลงมาจากฟ้างั้นหรือ?\nนั่นคือคชานภา มอนสเตอร์ในตำนานของดินแดนนี้!');
+        await say('ว่ากันว่าเลเวลของมันไม่มีที่สิ้นสุด ไม่มีใครเคยจับได้\nและมันจะปรากฏให้คนคนหนึ่งเห็นเพียงครั้งเดียว');
+        await say('ถ้าเธอเติบโตไปเรื่อย ๆ สักวันอาจได้พบมันอีก\nตอนนั้นค่อยมาเล่าให้ฉันฟังนะ');
+        save();
+        return;
+      }
       if (goalCaught().length >= 6 && !G.flags.finished) {
         G.flags.finished = true;
         await say('สุดยอดไปเลย! เธอจับมอนสเตอร์ครบทั้ง 6 ชนิดแล้ว');
@@ -684,6 +695,7 @@
       const names = goalCaught().map((sp) => SPECIES[sp].name);
       await say('คอมพิวเตอร์บันทึกข้อมูลมอนสเตอร์\nจับได้แล้ว ' + names.length + ' จาก 6 ชนิด' + (names.length ? ' : ' + names.join(' ') : ''));
       if (G.lab.length) await say('มอนสเตอร์ที่ฝากไว้ที่นี่ ' + G.lab.length + ' ตัว : ' + G.lab.map((m) => nm(m) + ' Lv.' + m.level).join(' '));
+      if (G.flags.legendMet) await say('บันทึกพิเศษ : พบเห็นมอนสเตอร์ในตำนาน 1 ชนิด\nคชานภา ธาตุตำนาน Lv.∞ (ยังจับไม่ได้)');
     },
     async lab_notes() { await say('บนจอมีบันทึกของศาสตราจารย์สน\n"มอนสเตอร์ที่อ่อนแรงจะจับด้วยแคปซูลได้ง่ายกว่ามาก"'); },
     async lab_tank() { await say('ถังแก้วบรรจุของเหลวสีฟ้าใส มีฟองอากาศลอยขึ้นเป็นระยะ'); },
@@ -766,7 +778,21 @@
     return makeMon(sp, e.levels[0] + rand(e.levels[1] - e.levels[0] + 1));
   }
   async function wildEncounter(area) {
+    // stage 1 only: the legendary monster comes down once, early on
+    if (MAP.id === 'village' && !G.flags.legendMet) {
+      G.wilds = (G.wilds || 0) + 1;
+      if (G.wilds >= LEGEND_AFTER) { await legendEncounter(); return; }
+    }
     await battle([pickWild(area)], null);
+  }
+  async function legendEncounter() {
+    await say('จู่ ๆ ลมก็หยุดพัด... พงหญ้าทั้งผืนเงียบสนิท');
+    await say('มีบางอย่างที่ยิ่งใหญ่กำลังลงมาจากท้องฟ้า!');
+    const foe = makeMon('legend', 99);
+    foe.infinite = true;                     // shown as level infinity
+    G.flags.legendMet = true;                // once only, whatever happens next
+    await battle([foe], null, { legend: true });
+    save();
   }
 
   // ------------------------------------------------------------------ battle
@@ -780,7 +806,7 @@
     return { dmg: Math.max(1, Math.floor(base * stab * eff * (0.85 + Math.random() * 0.15))), eff };
   }
 
-  async function battle(foes, trainer) {
+  async function battle(foes, trainer, opts = {}) {
     const lead = G.party.find((m) => m.hp > 0);
     if (!lead) return 'lose';
     // screen flash, then cut to the battle
@@ -793,6 +819,7 @@
       trainerX: trainer ? 0 : null, capsule: null, showMe: true, showFoe: !trainer,
       fx: null, evo: null, evolving: [], pop: null,
     };
+    if (opts.legend) { bt.spr.foe.dx = 0; bt.spr.foe.dy = -240; }      // it descends from the sky
     mode = 'battle';
     const foeName = () => trainer ? nm(bt.foe) + 'ของ' + trainer.name : nm(bt.foe) + 'ป่า';
     await fadeTo(0, 220);
@@ -804,6 +831,10 @@
       bt.trainerX = null; bt.showFoe = true;
       tween(260, (t) => { bt.spr.foe.dx = 220 * (1 - t); });
       await say(trainer.name + 'ส่ง' + nm(bt.foe) + 'ออกมา!');
+    } else if (opts.legend) {
+      await tween(1400, (t) => { bt.spr.foe.dy = -240 * (1 - t) * (1 - t); });
+      await say('มอนสเตอร์ในตำนาน ' + nm(bt.foe) + ' ปรากฏกาย!');
+      await say('เลเวลของมันคือ ∞ ... พลังที่ไม่มีที่สิ้นสุด');
     } else {
       await tween(300, (t) => { bt.spr.foe.dx = 220 * (1 - t); });
       await say(nm(bt.foe) + 'ป่าปรากฏตัว!');
@@ -927,6 +958,74 @@
       await useMove('foe', bt.foe.moves[rand(bt.foe.moves.length)]);
       if (bt.me.hp <= 0 && !(await afterMyFaint())) result = 'lose';
     }
+
+    // The legendary monster cannot be hurt or caught yet. It watches for three turns (or until
+    // the player backs away), restores the whole party, and leaves.
+    async function legendLoop() {
+      const name = nm(bt.foe), foeSpr = bt.spr.foe;
+      const watching = [name + 'มองดูคุณอย่างสงบ', 'ดวงตาสีทองของ' + name + 'เป็นประกายอ่อนโยน'];
+      let turns = 0;
+      while (turns < 3) {
+        ui.prompt = nm(bt.me) + 'จะทำอะไรดี?';
+        const act = await choose([
+          'ต่อสู้', { label: 'แคปซูล', right: 'x' + G.bag.capsule },
+          { label: 'ยา', right: 'x' + G.bag.potion }, 'หนี'], { x: 262, y: 236, w: 214, cols: 2, rowH: 33, start: bt.lastAct || 0 });
+        bt.lastAct = act;
+        ui.prompt = null;
+        if (act === 0) {
+          const i = await choose(bt.me.moves.map((id) => moveOption(id, bt.foe)), {
+            x: 4, y: 236, w: 472, cols: 2, rowH: 33, minH: 80, cancellable: true });
+          if (i < 0) continue;
+          const mv = MOVES[bt.me.moves[i]], s = bt.spr.me;
+          await say(nm(bt.me) + 'ใช้ท่า' + mv.name + '!');
+          await tween(110, (t) => { s.dx = 20 * t; s.dy = -9 * t; });
+          await tween(110, (t) => { s.dx = 20 * (1 - t); s.dy = -9 * (1 - t); });
+          bt.fx = { type: mv.type, x: SPOT.foe.x, y: SPOT.foe.y - 60, t: 0, strong: false };
+          await tween(440, (t) => { bt.fx.t = t; });
+          bt.fx = null;
+          bt.pop = { text: '-0', x: SPOT.foe.x - 58, y: SPOT.foe.y - 96, t: 0, color: '#c8c8d0', big: false };
+          await tween(900, (t) => { bt.pop.t = t; });
+          bt.pop = null;
+          await say('พลังห่างชั้นเกินไป... การโจมตีไม่ระคายผิว' + name + 'เลย');
+        } else if (act === 1) {
+          if (G.bag.capsule <= 0) { await say('แคปซูลหมดแล้ว!'); continue; }
+          await say('โยนแคปซูลออกไป!');
+          const from = { x: SPOT.me.x + 30, y: SPOT.me.y - 90 }, to = { x: SPOT.foe.x, y: SPOT.foe.y - 70 };
+          bt.capsule = { x: from.x, y: from.y };
+          await tween(420, (t) => { bt.capsule.x = from.x + (to.x - from.x) * t; bt.capsule.y = from.y + (to.y - from.y) * t - Math.sin(t * Math.PI) * 60; });
+          await tween(90, (t) => { ui.flash = 0.5 * (1 - t); });
+          await tween(520, (t) => { bt.capsule.x = to.x + (from.x - to.x) * t; bt.capsule.y = to.y + (from.y - to.y) * t - Math.sin(t * Math.PI) * 90; });
+          bt.capsule = null;
+          await say('แคปซูลกระเด็นกลับมาอยู่ในมือ!\n' + name + 'ยังไม่อาจถูกจับได้ในตอนนี้');
+        } else if (act === 2) {
+          if (G.bag.potion <= 0) { await say('ยาหมดแล้ว!'); continue; }
+          const max = stats(bt.me).hp;
+          if (bt.me.hp >= max) { await say(nm(bt.me) + 'ยังแข็งแรงเต็มที่อยู่'); continue; }
+          G.bag.potion--;
+          const before = bt.me.hp;
+          bt.me.hp = Math.min(max, bt.me.hp + 20);
+          await say('ใช้ยากับ' + nm(bt.me));
+          await tween(350, (t) => { bt.hp.me = before + (bt.me.hp - before) * t; });
+        } else {
+          await say('คุณค่อย ๆ ถอยออกมาอย่างนอบน้อม...');
+          break;
+        }
+        turns++;
+        if (turns < 3) await say(watching[turns - 1]);
+      }
+      await say(name + 'เปล่งแสงเจิดจ้า!');
+      await tween(220, (t) => { ui.flash = t; });
+      const before = bt.me.hp;
+      healParty();
+      bt.hp.me = bt.me.hp;
+      await tween(520, (t) => { ui.flash = 1 - t; });
+      if (bt.me.hp > before || G.party.some((m) => m !== bt.me)) await say('แสงอันอบอุ่นโอบล้อมทั้งทีม\nมอนสเตอร์ทุกตัวฟื้นพลังเต็มที่');
+      await tween(1100, (t) => { foeSpr.dy = -260 * t * t; foeSpr.alpha = 1 - t * t; });
+      await say(name + 'ทะยานขึ้นสู่ท้องฟ้าและหายลับไป...');
+      await say('ตำนานเล่าว่ามันจะปรากฏอีกครั้งเมื่อถึงเวลา\n(รอพบกันใหม่ในอัปเดตถัดไป)');
+      return 'legend';
+    }
+    if (opts.legend) result = await legendLoop();
 
     while (!result) {
       ui.prompt = nm(bt.me) + 'จะทำอะไรดี?';
@@ -1119,7 +1218,9 @@
       // sprites are drawn at twice their size; evolved forms have bigger sprites and stand a little lower
       const im = IMG['monsters/' + SPECIES[m.sp].img + (back ? '_back' : '')];
       const w = im.width * 2, h = im.height * 2, drop = Math.round((h - 128) / 4);
-      b.drawImage(im, Math.round(SPOT[side].x - w / 2 + s.dx), Math.round(SPOT[side].y + drop - h + s.dy), w, h);
+      let top = SPOT[side].y + drop - h;
+      if (side === 'foe') top = Math.max(4, top);
+      b.drawImage(im, Math.round(SPOT[side].x - w / 2 + s.dx), Math.round(top + s.dy), w, h);
       b.globalAlpha = 1;
     };
     if (bt.trainerX !== null && bt.trainer.img) b.drawImage(IMG[bt.trainer.img], Math.round(SPOT.foe.x - 80 + bt.trainerX), SPOT.foe.y - 150, 160, 160);
@@ -1222,7 +1323,7 @@
     box(12, 12, 198, 42);
     text(nm(bt.foe), 24, 31, 13, '#2b2420', 'left', true);
     badge(SPECIES[bt.foe.sp].type, 30 + ctx.measureText(nm(bt.foe)).width, 29);
-    text('Lv.' + bt.foe.level, 198, 31, 11, '#5a5048', 'right');
+    text(bt.foe.infinite ? 'Lv.∞' : 'Lv.' + bt.foe.level, 198, 31, bt.foe.infinite ? 13 : 11, bt.foe.infinite ? '#c08a12' : '#5a5048', 'right', !!bt.foe.infinite);
     text('HP', 24, 45, 9, '#c0442f', 'left', true);
     hpBar(42, 38, 156, bt.hp.foe, stats(bt.foe).hp);
     // mine: right, above the text box
@@ -1251,7 +1352,7 @@
     box(24, 10, 432, 300);
     text('ตารางแพ้ธาตุ', 40, 33, 14, '#2b2420', 'left', true);
     text('ท่าที่ได้เปรียบแรงขึ้น 1.5 เท่า  ท่าที่เสียเปรียบเหลือ 2 ใน 3', 444, 33, 10, '#5a5048', 'right');
-    Object.keys(TYPES).forEach((type, i) => {
+    Object.keys(TYPES).filter((t) => !TYPES[t].hidden).forEach((type, i) => {
       const y = 62 + i * 34, links = typeLinks(type);
       if (i % 2 === 0) { ctx.fillStyle = '#f1e9cf'; roundRect(32, y - 19, 416, 30, 4); ctx.fill(); }
       badge(type, 42, y);

@@ -9,6 +9,8 @@ const TYPES = {
   electric: { name: 'ไฟฟ้า', color: '#c99a10' },
   rock:     { name: 'หิน',    color: '#8a745f' },
   ghost:    { name: 'ผี',     color: '#8560b8' },
+  // the legendary monster's own type: outside the match-up table, so it is left out of it
+  legend:   { name: 'ตำนาน', color: '#c08a12', hidden: true },
 };
 
 // TYPE_CHART[attacking type][defending type] = damage multiplier (1 when missing)
@@ -184,6 +186,13 @@ const SPECIES = {
               hp: 65, atk: 78, def: 65, spd: 90,
               moves: [[1, 'tackle'], [1, 'lantern_glow'], [4, 'wing_slap'], [8, 'wing_haunt'], [11, 'dew_dust'], [14, 'moon_lantern']] },
 };
+// The legendary monster. It is met exactly once, in the village's tall grass (stage 1),
+// as the LEGEND_AFTER-th wild encounter there. Its level is shown as infinite: it cannot be
+// hurt or caught, and it leaves by itself. Meeting it again is left for a later update.
+SPECIES.legend = { name: 'คชานภา', type: 'legend', img: 'legend_sky_elephant', frontOnly: true,
+                   hp: 255, atk: 255, def: 255, spd: 255, moves: [[1, 'tackle']] };
+const LEGEND_AFTER = 3;
+
 const STARTERS = ['lamb', 'narwhal', 'pangolin'];
 // the species the professor asks you to collect (evolved forms do not count separately)
 const GOAL_SPECIES = ['lamb', 'narwhal', 'pangolin', 'beetle', 'tortoise', 'moth'];
