@@ -83,12 +83,33 @@
   function makeMon(sp, level) {
     const m = { sp, level, exp: expAt(level), hp: 0, moves: [] };
     for (const [lv, mv] of SPECIES[sp].moves) if (lv <= level) m.moves.push(mv);
-    m.moves = m.moves.slice(-4);
+    m.moves = m.moves.slice(-MAX_MOVES);
     m.hp = stats(m).hp;
     return m;
   }
   function healParty() { for (const m of G.party) m.hp = stats(m).hp; }
+  function typeMult(moveType, defType) {
+    const row = TYPE_CHART[moveType];
+    return row && row[defType] !== undefined ? row[defType] : 1;
+  }
+  // types this type hits hard / hits weakly / is hit hard by / shrugs off
+  const typeLinks = (type) => {
+    const all = Object.keys(TYPES);
+    return { beats: all.filter((d) => typeMult(type, d) > 1), weakTo: all.filter((a) => typeMult(a, type) > 1),
+             resists: all.filter((a) => typeMult(a, type) < 1) };
+  };
+  // A move as a menu line; against a foe it also says whether the type match-up helps.
+  function moveOption(id, foe) {
+    const mv = MOVES[id];
+    const eff = foe ? typeMult(mv.type, SPECIES[foe.sp].type) : 1;
+    return { label: mv.name, badge: mv.type,
+             sub: 'พลัง ' + mv.power + (eff > 1 ? '  ▲ ได้เปรียบธาตุ' : eff < 1 ? '  ▼ เสียเปรียบธาตุ' : ''),
+             subColor: eff > 1 ? '#2f8a3a' : eff < 1 ? '#c0442f' : '#5a5048' };
+  }
+  function anyKey() { return new Promise((resolve) => { ui.wait = resolve; }); }
   function noteCaught(sp) { if (!G.caught.includes(sp)) G.caught.push(sp); }
+  // the collecting goal counts the six basic species only, not their evolved forms
+  const goalCaught = () => GOAL_SPECIES.filter((sp) => G.caught.includes(sp));
 
   function newGame() {
     G = { player: { ...START_SPOT }, party: [], lab: [], bag: { capsule: 0, potion: 0 },
@@ -317,6 +338,10 @@
   }
 
   function press(k, repeat) {
+    if (ui.wait && !ui.menu) {            // an information panel is open: confirm or cancel closes it
+      if (!repeat && (k === 'ok' || k === 'back')) { const done = ui.wait; ui.wait = null; done(); }
+      return;
+    }
     if (ui.menu) {
       const m = ui.menu, n = m.opts.length;
       let i = m.index;
@@ -367,7 +392,7 @@
       groundCache[MAP.id] = cv;
     }
     groundCanvas = groundCache[MAP.id];
-    npcs = MAP.npcs.map((n) => ({ ...n }));
+    npcs = MAP.npcs.filter((n) => !(n.hideIf && G.flags[n.hideIf])).map((n) => ({ ...n }));
   }
   function placePlayer(spot) {
     pl.c = spot.c; pl.r = spot.r; pl.dir = spot.dir; pl.moving = false; pl.t = 0;
@@ -382,6 +407,7 @@
     await fadeTo(1, 180);
     setMap(spot.map);
     placePlayer(spot);
+    if (MAP.title) ui.banner = { text: MAP.title, t: 0 };
     await fadeTo(0, 180);
     save();
   }
@@ -397,8 +423,11 @@
     const c = pl.c + dx, r = pl.r + dy;
     const door = MAP.warps.get(cellKey(c, r));
     if (door) { run(() => travel(door)); return; }
-    if (r >= MAP.h && MAP.id === 'village') {
-      run(async () => { await say('เส้นทางข้างหน้ายังไม่เปิดให้ผ่านในเวอร์ชันนี้'); });
+    if (c < 0 || r < 0 || c >= MAP.w || r >= MAP.h) {        // walking off the map: an exit, or nothing
+      const exit = MAP.exits.find((e) => e.side === d && pl.c >= e.c0 && pl.c <= e.c1);
+      if (!exit) return;
+      if (!exit.to || (exit.need && !G.flags[exit.need])) run(async () => { await say(exit.lockedText); });
+      else run(() => travel({ map: exit.to.map, c: pl.c + exit.to.dc, r: exit.to.r, dir: d }));
       return;
     }
     if (isBlocked(c, r)) return;
@@ -508,15 +537,15 @@
         save();
         return;
       }
-      if (G.caught.length >= 6 && !G.flags.finished) {
+      if (goalCaught().length >= 6 && !G.flags.finished) {
         G.flags.finished = true;
         await say('สุดยอดไปเลย! เธอจับมอนสเตอร์ครบทั้ง 6 ชนิดแล้ว');
-        await say('ข้อมูลของเธอช่วยงานวิจัยได้มาก ขอบคุณจริง ๆ\nนี่คือจุดสิ้นสุดของเวอร์ชันต้นแบบ แต่ยังเดินเล่นต่อได้นะ');
+        await say('ข้อมูลของเธอช่วยงานวิจัยได้มาก ขอบคุณจริง ๆ\nที่เส้นทางที่ 1 ทางใต้ยังมีชนิดใหม่อีกมาก ลองไปสำรวจดูนะ');
         save();
         return;
       }
-      await say('ตอนนี้เธอจับได้ ' + G.caught.length + ' จาก 6 ชนิด\n' +
-        (G.caught.length >= 6 ? 'ครบแล้ว เก่งมาก!' : 'พงหญ้าฝั่งตะวันออกมีชนิดหายากกว่าฝั่งตะวันตกนะ'));
+      await say('ตอนนี้เธอจับได้ ' + goalCaught().length + ' จาก 6 ชนิด\n' +
+        (goalCaught().length >= 6 ? 'ครบแล้ว เก่งมาก! เส้นทางที่ 1 ทางใต้ยังมีชนิดใหม่รออยู่' : 'พงหญ้าฝั่งตะวันออกมีชนิดหายากกว่าฝั่งตะวันตกนะ'));
       if (G.lab.length) await say('มอนสเตอร์ที่ฝากไว้ที่ศูนย์วิจัยมี ' + G.lab.length + ' ตัว ฉันดูแลให้อย่างดี');
     },
 
@@ -540,7 +569,7 @@
 
     async rival() {
       if (!G.flags.starter) { await say('นายยังไม่มีมอนสเตอร์เหรอ?\nไปหาศาสตราจารย์สนที่ลานกลางหมู่บ้านก่อนสิ'); return; }
-      if (G.flags.rivalBeaten) { await say('ครั้งหน้าฉันไม่แพ้แน่! ฉันจะไปฝึกในพงหญ้าเพิ่ม'); return; }
+      if (G.flags.rivalBeaten) { await say('ครั้งหน้าฉันไม่แพ้แน่! เจอกันที่เส้นทางที่ 1'); return; }
       if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปศูนย์รักษาก่อนเถอะ'); return; }
       await say('ฉันชื่อพายุ! ได้มอนสเตอร์มาจากศาสตราจารย์เหมือนกัน\nมาประลองกันหน่อย!');
       const result = await battle([makeMon(RIVAL_PICK[G.flags.starter], 5)], { name: 'พายุ', img: 'chars/rival_large' });
@@ -548,13 +577,60 @@
         G.flags.rivalBeaten = true;
         G.bag.capsule += 3;
         await say('แพ้แล้ว... ฝีมือไม่เบานี่!\nเอาแคปซูล 3 ลูกนี่ไป ถือเป็นรางวัล');
+        await say('ฉันจะไปฝึกต่อที่เส้นทางที่ 1 ทางใต้ ถ้ากล้าก็ตามมาสิ!');
+        await fadeTo(1, 200);
+        npcs = npcs.filter((n) => n.id !== 'rival');
+        await fadeTo(0, 200);
+        await say('ทางไปเส้นทางที่ 1 เปิดแล้ว!\nเดินตามถนนลงไปทางใต้ได้เลย');
         save();
       }
     },
 
+    // ---- Route 1 (stage 2)
+    async rival2() {
+      if (G.flags.stage2) { await say('นายเก่งขึ้นทุกวันเลย... เมืองถัดไปอยู่ทางใต้ แต่ทางยังปิดอยู่\nไว้เจอกันใหม่ที่นั่น!'); return; }
+      if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปดื่มน้ำพุฟื้นพลังก่อนเถอะ'); return; }
+      await say('มาถึงจนได้! ฉันฝึกที่นี่จนมอนสเตอร์วิวัฒนาการแล้วนะ\nคราวนี้ฉันมีสองตัว รับมือให้ได้ล่ะ!');
+      const team = RIVAL_REMATCH.map(([sp, lv]) => makeMon(sp === 'starter2' ? RIVAL_PICK[G.flags.starter] + '2' : sp, lv));
+      const result = await battle(team, { name: 'พายุ', img: 'chars/rival_large' });
+      if (result === 'win') {
+        G.flags.stage2 = true;
+        G.bag.capsule += 5; G.bag.potion += 3;
+        await say('แพ้อีกแล้ว... ยอมรับเลยว่านายเก่งจริง\nเอาแคปซูล 5 ลูกกับยา 3 ขวดนี่ไป');
+        await say('ยินดีด้วย! คุณผ่านด่าน 2 เส้นทางที่ 1 แล้ว');
+        save();
+      }
+    },
+    async spring() {
+      await say('น้ำพุใสเย็นไหลออกมาจากบ่อหิน\nมอนสเตอร์ทั้งทีมได้ดื่มน้ำจนสดชื่น');
+      if (!G.party.length) return;
+      await fadeTo(0.6, 250); healParty(); await wait(350); await fadeTo(0, 250);
+      await say('ทุกตัวฟื้นพลังเต็มที่แล้ว!');
+      save();
+    },
+    async sign_r1_top() { await say('เส้นทางที่ 1\nทิศเหนือ : หมู่บ้านต้นกล้า   ทิศใต้ : สะพานข้ามแม่น้ำ'); },
+    async sign_r1_bridge() { await say('สะพานไม้ข้ามแม่น้ำ\nพงหญ้าฝั่งใต้มีมอนสเตอร์แข็งแกร่งกว่าฝั่งเหนือ'); },
+    async sign_r1_spring() { await say('ลานน้ำพุ\nสำรวจบ่อน้ำเพื่อฟื้นพลังมอนสเตอร์ได้ทุกเมื่อ'); },
+    async sign_r1_end() { await say('ทิศใต้ : เมืองถัดไป (ยังไม่เปิด)'); },
+    async r1_crate_a() {
+      if (G.flags.r1a) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.r1a = true; G.bag.capsule += 3;
+      await say('เปิดลังไม้ดู...\nพบแคปซูล 3 ลูก!'); save();
+    },
+    async r1_crate_b() {
+      if (G.flags.r1b) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.r1b = true; G.bag.potion += 3;
+      await say('เปิดลังไม้ดู...\nพบยา 3 ขวด!'); save();
+    },
+    async r1_crate_c() {
+      if (G.flags.r1c) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.r1c = true; G.bag.capsule += 4; G.bag.potion += 2;
+      await say('เปิดลังไม้ดู...\nพบแคปซูล 4 ลูกและยา 2 ขวด!'); save();
+    },
+
     async sign_village() { await say('หมู่บ้านต้นกล้า\nทิศใต้ : เส้นทางที่ 1 และพงหญ้าสูง'); },
     async sign_grass() { await say('ระวัง! พงหญ้าสูงมีมอนสเตอร์ป่า\nฝั่งตะวันตกเหมาะกับมือใหม่ ฝั่งตะวันออกมีตัวที่แข็งแกร่งกว่า'); },
-    async sign_route() { await say('เส้นทางที่ 1\nทางไปเมืองถัดไปอยู่ระหว่างก่อสร้าง'); },
+    async sign_route() { await say('ทิศใต้ : เส้นทางที่ 1\nมีมอนสเตอร์ชนิดใหม่ที่ไม่พบในหมู่บ้าน'); },
     async well() { await say('น้ำในบ่อใสแจ๋ว มองเห็นก้นบ่อเลย'); },
     // ---- inside the buildings
     async home_bed() {
@@ -575,7 +651,7 @@
       save();
     },
     async lab_computer() {
-      const names = G.caught.map((sp) => SPECIES[sp].name);
+      const names = goalCaught().map((sp) => SPECIES[sp].name);
       await say('คอมพิวเตอร์บันทึกข้อมูลมอนสเตอร์\nจับได้แล้ว ' + names.length + ' จาก 6 ชนิด' + (names.length ? ' : ' + names.join(' ') : ''));
       if (G.lab.length) await say('มอนสเตอร์ที่ฝากไว้ที่นี่ ' + G.lab.length + ' ตัว : ' + G.lab.map((m) => nm(m) + ' Lv.' + m.level).join(' '));
     },
@@ -602,22 +678,32 @@
   };
 
   async function teamScreen() {
-    if (!G.party.length) { await say('ยังไม่มีมอนสเตอร์ในทีม'); return; }
     let at = 0;
     for (;;) {
       const opts = G.party.map((m) => ({
         label: nm(m) + '  Lv.' + m.level, badge: SPECIES[m.sp].type, hp: [m.hp, stats(m).hp] }));
+      opts.push({ label: 'ดูตารางแพ้ธาตุ' });
       const i = await choose(opts, {
-        x: 50, y: 30, w: 380, rowH: 30, cancellable: true, start: at,
-        title: 'ทีมมอนสเตอร์',
-        footer: 'แคปซูล ' + G.bag.capsule + '   ยา ' + G.bag.potion + '   จับได้ ' + G.caught.length + '/6 ชนิด' });
+        x: 50, y: 24, w: 380, rowH: 30, cancellable: true, start: at,
+        title: G.party.length ? 'ทีมมอนสเตอร์  (เลือกเพื่อดูข้อมูล)' : 'ยังไม่มีมอนสเตอร์ในทีม',
+        footer: 'แคปซูล ' + G.bag.capsule + '   ยา ' + G.bag.potion + '   จับได้ ' + goalCaught().length + '/6 ชนิด' });
       if (i < 0) break;
-      at = 0;
+      at = i;
+      if (i === G.party.length) {          // the type table
+        ui.chart = true; await anyKey(); ui.chart = false;
+        continue;
+      }
+      const m = G.party[i];
+      ui.card = m;                         // the monster's information card
+      const pick = await choose(['ตั้งเป็นตัวนำ', 'กลับ'], { x: 212, y: 262, w: 220, cols: 2, rowH: 24, cancellable: true });
+      ui.card = null;
+      if (pick !== 0) continue;
       if (i > 0) {
-        const m = G.party.splice(i, 1)[0];
+        G.party.splice(i, 1);
         G.party.unshift(m);
+        at = 0;
         await say(nm(m) + 'ขึ้นมาเป็นตัวนำทีมแล้ว');
-      } else await say(nm(G.party[0]) + 'เป็นตัวนำทีมอยู่แล้ว\nเลือกตัวอื่นเพื่อสลับขึ้นมานำได้');
+      } else await say(nm(m) + 'เป็นตัวนำทีมอยู่แล้ว');
     }
     save();
   }
@@ -636,10 +722,6 @@
   // ------------------------------------------------------------------ battle
   const SPOT = { me: { x: 153, y: 204 }, foe: { x: 372, y: 146 } };   // where each monster's feet stand
 
-  function typeMult(moveType, defType) {
-    const row = TYPE_CHART[moveType];
-    return row && row[defType] !== undefined ? row[defType] : 1;
-  }
   function damage(att, def, mv) {
     const A = stats(att).atk, D = stats(def).def;
     const base = Math.floor(((2 * att.level / 5 + 2) * mv.power * A / D) / 50) + 2;
@@ -659,6 +741,7 @@
       hp: { me: lead.hp, foe: foes[0].hp },
       spr: { me: { dx: -220, dy: 0, alpha: 1, blink: false }, foe: { dx: 220, dy: 0, alpha: 1, blink: false } },
       trainerX: trainer ? 0 : null, capsule: null, showMe: true, showFoe: !trainer,
+      fx: null, evo: null, evolving: [],
     };
     mode = 'battle';
     const foeName = () => trainer ? nm(bt.foe) + 'ของ' + trainer.name : nm(bt.foe) + 'ป่า';
@@ -683,16 +766,25 @@
       const other = side === 'me' ? 'foe' : 'me';
       const att = bt[side], def = bt[other], mv = MOVES[mvId];
       await say((side === 'me' ? nm(att) : foeName()) + 'ใช้ท่า' + mv.name + '!');
-      const dir = side === 'me' ? 1 : -1, s = bt.spr[side];
+      const dir = side === 'me' ? 1 : -1, s = bt.spr[side], hit = bt.spr[other];
       await tween(110, (t) => { s.dx = dir * 20 * t; s.dy = -dir * 9 * t; });
       await tween(110, (t) => { s.dx = dir * 20 * (1 - t); s.dy = -dir * 9 * (1 - t); });
       const { dmg, eff } = damage(att, def, mv);
-      await tween(360, (t) => { bt.spr[other].blink = Math.floor(t * 6) % 2 === 0; });
-      bt.spr[other].blink = false;
+      // the move's effect plays over the target, which shakes while it is being hit
+      bt.fx = { type: mv.type, x: SPOT[other].x, y: SPOT[other].y - 60, t: 0, strong: eff > 1 };
+      await tween(eff > 1 ? 520 : 440, (t) => {
+        bt.fx.t = t;
+        hit.dx = t > 0.25 && t < 0.9 ? Math.round(Math.sin(t * 46) * (eff > 1 ? 5 : 3)) : 0;
+        if (eff > 1) ui.flash = t > 0.3 && t < 0.42 ? 0.35 : 0;
+      });
+      bt.fx = null; hit.dx = 0; ui.flash = 0;
+      await tween(240, (t) => { hit.blink = Math.floor(t * 4) % 2 === 0; });
+      hit.blink = false;
       const from = def.hp;
       def.hp = Math.max(0, def.hp - dmg);
       await tween(350, (t) => { bt.hp[other] = from + (def.hp - from) * t; });
-      if (eff > 1) await say('ได้ผลดีเยี่ยม!'); else if (eff < 1) await say('ไม่ค่อยได้ผล...');
+      const versus = 'ธาตุ' + TYPES[mv.type].name + (eff > 1 ? 'ชนะทาง' : 'แพ้ทาง') + 'ธาตุ' + TYPES[SPECIES[def.sp].type].name;
+      if (eff > 1) await say('ได้ผลดีเยี่ยม! ' + versus); else if (eff < 1) await say('ไม่ค่อยได้ผล... ' + versus);
     }
     async function faint(side) {
       const s = bt.spr[side];
@@ -709,13 +801,51 @@
         bt.hp.me = m.hp;
         await say(nm(m) + 'เลเวลอัปเป็น Lv.' + m.level + '!');
         for (const [lv, mv] of SPECIES[m.sp].moves) {
-          if (lv === m.level && !m.moves.includes(mv)) {
-            m.moves.push(mv);
-            if (m.moves.length > 4) m.moves.shift();
-            await say(nm(m) + 'เรียนรู้ท่า' + MOVES[mv].name + '!');
-          }
+          if (lv === m.level && !m.moves.includes(mv)) await learnMove(m, mv);
         }
       }
+      const evo = SPECIES[m.sp].evolve;
+      if (evo && m.level >= evo.level && !bt.evolving.includes(m)) bt.evolving.push(m);
+    }
+    // A monster keeps at most MAX_MOVES moves. With a full set the player chooses one to
+    // forget, or keeps the old set.
+    async function learnMove(m, id) {
+      const mv = MOVES[id];
+      if (m.moves.length < MAX_MOVES) {
+        m.moves.push(id);
+        await say(nm(m) + 'เรียนรู้ท่า' + mv.name + '!');
+        return;
+      }
+      await say(nm(m) + 'อยากเรียนท่า' + mv.name + ' (ธาตุ' + TYPES[mv.type].name + ' พลัง ' + mv.power + ')\nแต่จำท่าได้สูงสุด ' + MAX_MOVES + ' ท่า');
+      const opts = m.moves.map((x) => moveOption(x, null));
+      opts.push({ label: 'ไม่เรียนท่าใหม่', sub: 'เก็บท่าเดิมไว้ทั้งหมด' });
+      const i = await choose(opts, { x: 4, y: 181, w: 472, cols: 2, rowH: 33,
+        title: 'จะให้ลืมท่าไหน เพื่อเรียนท่า' + mv.name + '?' });
+      if (i >= m.moves.length) { await say(nm(m) + 'ไม่ได้เรียนท่า' + mv.name); return; }
+      const old = MOVES[m.moves[i]].name;
+      m.moves[i] = id;
+      await say('1... 2... 3... ปิ๊ง!\n' + nm(m) + 'ลืมท่า' + old + ' แล้วเรียนรู้ท่า' + mv.name + '!');
+    }
+    // Change a monster into its next form, on the battle screen once the fight is over.
+    async function evolve(m) {
+      const evo = SPECIES[m.sp].evolve;
+      if (!evo || m.level < evo.level || m.hp <= 0) return;
+      const oldName = nm(m);
+      bt.evo = { from: m.sp, to: evo.to, showNew: false, t: 0 };
+      await say('เอ๊ะ? ' + oldName + 'มีท่าทางแปลกไป!');
+      bt.fx = { type: 'evolve', x: 240, y: 132, t: 0, strong: true };
+      // the two forms flicker faster and faster, then a white flash settles on the new one
+      await tween(2600, (t) => { bt.evo.t = t; bt.fx.t = (t * 3) % 1; bt.evo.showNew = Math.sin(t * t * 70) > 0; });
+      await tween(160, (t) => { ui.flash = t; });
+      const before = stats(m).hp;
+      m.sp = evo.to;
+      m.hp = Math.min(stats(m).hp, m.hp + stats(m).hp - before);
+      if (m === bt.me) bt.hp.me = m.hp;
+      bt.evo.showNew = true; bt.fx = null;
+      noteCaught(m.sp);
+      await tween(420, (t) => { ui.flash = 1 - t; });
+      await say('ยินดีด้วย! ' + oldName + 'วิวัฒนาการเป็น' + nm(m) + 'แล้ว!');
+      bt.evo = null;
     }
     // After my monster falls: bring in the next one, or lose. Returns false when the battle is lost.
     async function afterMyFaint() {
@@ -754,8 +884,7 @@
       ui.prompt = null;
 
       if (act === 0) {
-        const i = await choose(bt.me.moves.map((id) => ({
-          label: MOVES[id].name, badge: MOVES[id].type, right: String(MOVES[id].power) })), {
+        const i = await choose(bt.me.moves.map((id) => moveOption(id, bt.foe)), {
           x: 4, y: 236, w: 472, cols: 2, rowH: 33, minH: 80, cancellable: true });
         if (i < 0) continue;
         const mine = bt.me.moves[i], theirs = bt.foe.moves[rand(bt.foe.moves.length)];
@@ -815,6 +944,7 @@
     }
 
     if (result === 'win' && trainer) await say('ชนะ' + trainer.name + 'แล้ว!');
+    if (result !== 'lose') for (const m of bt.evolving) await evolve(m);
     if (result === 'lose') await say('ไม่มีมอนสเตอร์ที่สู้ไหวแล้ว...\nคุณรีบพามอนสเตอร์กลับไปที่ศูนย์รักษา');
     await fadeTo(1, 240);
     bt = null; mode = 'world';
@@ -830,14 +960,113 @@
   }
   function noteSeen() { /* reserved for a monster journal */ }
 
+  // Attack effects: small pixel particles drawn over the target, one look per move type.
+  // fx = { type, x, y (centre of the target), t (0..1), strong }
+  function drawFx(fx) {
+    const t = fx.t, n = fx.strong ? 1.5 : 1;
+    const rnd = (i, k) => { const v = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return v - Math.floor(v); };
+    const dot = (x, y, size, color) => { b.fillStyle = color; b.fillRect(Math.round(x - size / 2), Math.round(y - size / 2), size, size); };
+    const pick = (list, i) => list[i % list.length];
+    if (fx.type === 'fire') {                       // a burst of flame, then embers rising
+      if (t < 0.45) for (let i = 0; i < 5; i++) dot(fx.x + (i - 2) * 13, fx.y + 26 - t * 40 - (i % 2) * 10, 18 - Math.abs(i - 2) * 3, pick(['#ff8a1f', '#ffd23f', '#fff3a0'], i));
+      for (let i = 0; i < 24 * n; i++) {
+        const start = rnd(i, 1) * 0.45, life = (t - start) / 0.55;
+        if (life < 0 || life > 1) continue;
+        dot(fx.x + (rnd(i, 2) - 0.5) * 84 + Math.sin(life * 6 + i) * 5, fx.y + 40 - life * 92,
+          life < 0.4 ? 10 : life < 0.75 ? 8 : 4, pick(['#fff3a0', '#ffd23f', '#ff8a1f', '#e0431f'], i + (life > 0.5 ? 2 : 0)));
+      }
+    } else if (fx.type === 'water') {               // a splash, then droplets flying up and falling
+      if (t < 0.4) for (let i = 0; i < 5; i++) dot(fx.x + (i - 2) * 14, fx.y + 30 - Math.sin(t * 8) * 14 - (i % 2) * 8, 16 - Math.abs(i - 2) * 2, pick(['#4aa8f0', '#9fd8ff', '#ffffff'], i));
+      for (let i = 0; i < 24 * n; i++) {
+        const a = Math.PI * (1.1 + rnd(i, 1) * 0.8), sp = 46 + rnd(i, 2) * 50;
+        dot(fx.x + Math.cos(a) * sp * t * 1.5, fx.y + 24 + Math.sin(a) * sp * t * 1.9 + 130 * t * t,
+          rnd(i, 3) > 0.6 ? 10 : rnd(i, 3) > 0.3 ? 8 : 6, pick(['#ffffff', '#9fd8ff', '#4aa8f0', '#2f86e0'], i));
+      }
+    } else if (fx.type === 'leaf') {                // two slashes, with leaves cutting across
+      for (let k = 0; k < 2; k++) {
+        const s0 = 0.12 + k * 0.2, len = Math.min(1, Math.max(0, (t - s0) / 0.22));
+        if (len <= 0 || t > s0 + 0.5) continue;
+        for (let j = 0; j < 14 * len; j++) dot(fx.x - 46 + j * 7, fx.y - 44 + k * 26 + j * 5.5 * (k ? -1 : 1) + (k ? 50 : 0), j % 3 ? 8 : 6, j % 2 ? '#e8ffd0' : '#b6f078');
+      }
+      for (let i = 0; i < 16 * n; i++) {
+        const start = rnd(i, 1) * 0.4, life = (t - start) / 0.6;
+        if (life < 0 || life > 1) continue;
+        const x = fx.x - 66 + life * 132, y = fx.y - 56 + rnd(i, 2) * 70 + life * 44 + Math.sin(life * 9 + i) * 6;
+        b.fillStyle = '#1f6a2c';
+        const flat = Math.floor(life * 8 + i) % 2;
+        b.fillRect(Math.round(x - (flat ? 7 : 4)), Math.round(y - (flat ? 4 : 7)), flat ? 14 : 8, flat ? 8 : 14);
+        b.fillStyle = pick(['#7ed957', '#3f9d45', '#b6f078'], i);
+        b.fillRect(Math.round(x - (flat ? 6 : 3)), Math.round(y - (flat ? 3 : 6)), flat ? 12 : 6, flat ? 6 : 12);
+      }
+    } else if (fx.type === 'electric') {            // flickering bolts from above
+      if (Math.floor(t * 12) % 2 === 0) {
+        for (let k = 0; k < Math.round(2 * n); k++) {
+          let x = fx.x - 28 + k * 28 + (rnd(k, Math.floor(t * 12)) - 0.5) * 16;
+          for (let s = 0; s < 9; s++) {
+            const nx = x + (rnd(s + k * 9, Math.floor(t * 12)) - 0.5) * 22;
+            const y = fx.y - 78 + s * 14;
+            b.fillStyle = '#f7d21c'; b.fillRect(Math.round(Math.min(x, nx)) - 1, y, Math.round(Math.abs(nx - x)) + 6, 6);
+            b.fillRect(Math.round(nx) - 1, y, 6, 16);
+            b.fillStyle = '#fffbe0'; b.fillRect(Math.round(nx) + 1, y + 2, 2, 12);
+            x = nx;
+          }
+        }
+      }
+    } else if (fx.type === 'rock') {                // stones dropping, then dust
+      for (let i = 0; i < 6 * n; i++) {
+        const start = i * 0.09, fall = Math.min(1, Math.max(0, (t - start) / 0.4));
+        if (t < start) continue;
+        const x = fx.x - 44 + rnd(i, 1) * 88, y = fx.y - 96 + fall * fall * 124;
+        if (fall < 1) {
+          const sz = 10 + Math.floor(rnd(i, 2) * 3) * 2;
+          dot(x, y, sz + 2, '#4a4038'); dot(x, y, sz, pick(['#9a8a78', '#7d6f60', '#b0a090'], i)); dot(x - 2, y - 2, 4, '#cfc3b2');
+        } else {
+          const puff = (t - start - 0.4) / 0.3;
+          if (puff < 1) for (let d = 0; d < 3; d++) dot(x + (d - 1) * 12 * puff, fx.y + 28 - puff * 10, 6, '#d8cdbb');
+        }
+      }
+    } else if (fx.type === 'ghost') {               // a dark core with wisps spiralling inward
+      const pulse = 14 + Math.round(Math.sin(t * 16) * 4) + Math.round(t * 16);
+      dot(fx.x, fx.y, pulse + 6, '#3a2760'); dot(fx.x, fx.y, pulse, '#5b3f8a'); dot(fx.x, fx.y, Math.max(4, pulse - 10), '#c9a8ff');
+      for (let i = 0; i < 18 * n; i++) {
+        const a = i * 0.9 + t * 7, r = 62 * (1 - t) + 10 + rnd(i, 1) * 10;
+        dot(fx.x + Math.cos(a) * r, fx.y + Math.sin(a) * r * 0.7, i % 3 ? 10 : 6, pick(['#c9a8ff', '#8560b8', '#5b3f8a', '#f0e6ff'], i));
+      }
+    } else if (fx.type === 'evolve') {              // sparkles rising all around
+      for (let i = 0; i < 34; i++) {
+        const life = (t + rnd(i, 1)) % 1;
+        dot(fx.x + (rnd(i, 2) - 0.5) * 190, fx.y + 80 - life * 170, life < 0.5 ? 8 : 4, pick(['#ffffff', '#fff3a0', '#9fd8ff'], i));
+      }
+    } else {                                        // normal: a burst of impact lines
+      const r0 = 6 + t * 30, r1 = 16 + t * 50;
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4 + 0.3;
+        for (let s = 0; s < 4; s++) {
+          const r = r0 + (r1 - r0) * s / 3;
+          if (t < 0.85) dot(fx.x + Math.cos(a) * r, fx.y + Math.sin(a) * r, s < 2 ? 6 : 4, s % 2 ? '#fff3a0' : '#ffffff');
+        }
+      }
+      if (t < 0.3) dot(fx.x, fx.y, 22, '#ffffff');
+    }
+  }
+
   function drawBattle() {
     b.drawImage(IMG.battle_bg, 0, 0);
+    if (bt.evo) {                                   // evolution: one monster, centre stage
+      const sp = SPECIES[bt.evo.showNew ? bt.evo.to : bt.evo.from];
+      const im = IMG['monsters/' + sp.img];
+      b.drawImage(im, 240 - im.width, 206 - im.height * 2, im.width * 2, im.height * 2);
+      if (bt.fx) drawFx(bt.fx);
+      return;
+    }
     const mon = (side, m, back) => {
       const s = bt.spr[side];
       if (s.blink || s.alpha <= 0) return;
       b.globalAlpha = Math.max(0, Math.min(1, s.alpha));
-      b.drawImage(IMG['monsters/' + SPECIES[m.sp].img + (back ? '_back' : '')],
-        Math.round(SPOT[side].x - 64 + s.dx), Math.round(SPOT[side].y - 128 + s.dy), 128, 128);
+      // sprites are drawn at twice their size; evolved forms have bigger sprites and stand a little lower
+      const im = IMG['monsters/' + SPECIES[m.sp].img + (back ? '_back' : '')];
+      const w = im.width * 2, h = im.height * 2, drop = Math.round((h - 128) / 4);
+      b.drawImage(im, Math.round(SPOT[side].x - w / 2 + s.dx), Math.round(SPOT[side].y + drop - h + s.dy), w, h);
       b.globalAlpha = 1;
     };
     if (bt.trainerX !== null) b.drawImage(IMG[bt.trainer.img], Math.round(SPOT.foe.x - 80 + bt.trainerX), SPOT.foe.y - 150, 160, 160);
@@ -851,6 +1080,7 @@
       b.fillStyle = '#fbf7e9'; b.fillRect(x - 1, y - 1, 2, 2);
     }
     mon('me', bt.me, true);
+    if (bt.fx) drawFx(bt.fx);
   }
 
   // -------------------------------------------------------------- UI drawing
@@ -899,12 +1129,13 @@
     m.opts.forEach((o, i) => {
       const cx = m.x + 8 + (i % m.cols) * cellW;
       const cy = m.y + 7 + m.titleH + Math.floor(i / m.cols) * m.rowH;
-      const mid = cy + m.rowH / 2 + 5;
+      const mid = o.sub ? cy + 15 : cy + m.rowH / 2 + 5;
       if (i === m.index) {
         ctx.fillStyle = '#efe6c8'; roundRect(cx + 1, cy + 1, cellW - 2, m.rowH - 2, 4); ctx.fill();
         text('▶', cx + 5, mid - 1, 9, '#c0442f');
       }
       text(o.label, cx + 18, mid, 13, o.disabled ? '#a39c8c' : '#2b2420');
+      if (o.sub) text(o.sub, cx + 18, cy + 28, 10, o.subColor || '#5a5048');
       let right = cx + cellW - 8;
       if (o.hp) {
         text(Math.ceil(o.hp[0]) + '/' + o.hp[1], right, mid, 11, '#5a5048', 'right');
@@ -936,6 +1167,7 @@
     // foe: top left
     box(12, 12, 198, 42);
     text(nm(bt.foe), 24, 31, 13, '#2b2420', 'left', true);
+    badge(SPECIES[bt.foe.sp].type, 30 + ctx.measureText(nm(bt.foe)).width, 29);
     text('Lv.' + bt.foe.level, 198, 31, 11, '#5a5048', 'right');
     text('HP', 24, 45, 9, '#c0442f', 'left', true);
     hpBar(42, 38, 156, bt.hp.foe, stats(bt.foe).hp);
@@ -943,6 +1175,7 @@
     const max = stats(bt.me).hp;
     box(270, 172, 198, 58);
     text(nm(bt.me), 282, 191, 13, '#2b2420', 'left', true);
+    badge(SPECIES[bt.me.sp].type, 288 + ctx.measureText(nm(bt.me)).width, 189);
     text('Lv.' + bt.me.level, 456, 191, 11, '#5a5048', 'right');
     text('HP', 282, 205, 9, '#c0442f', 'left', true);
     hpBar(300, 198, 156, bt.hp.me, max);
@@ -950,6 +1183,66 @@
     const lo = expAt(bt.me.level), hi = expAt(bt.me.level + 1);
     ctx.fillStyle = '#d6cdb4'; ctx.fillRect(282, 216, 110, 3);
     ctx.fillStyle = '#4a8fd8'; ctx.fillRect(282, 216, 110 * Math.max(0, Math.min(1, (bt.me.exp - lo) / (hi - lo))), 3);
+  }
+
+  // Row of type badges; returns the x after the last one.
+  function badges(types, x, y) {
+    if (!types.length) { text('-', x, y + 1, 11, '#a39c8c'); return x + 10; }
+    for (const t of types) x += badge(t, x, y) + 4;
+    return x;
+  }
+
+  // Which type beats which.
+  function drawTypeChart() {
+    box(24, 10, 432, 300);
+    text('ตารางแพ้ธาตุ', 40, 33, 14, '#2b2420', 'left', true);
+    text('ท่าที่ได้เปรียบแรงขึ้น 1.5 เท่า  ท่าที่เสียเปรียบเหลือ 2 ใน 3', 444, 33, 10, '#5a5048', 'right');
+    Object.keys(TYPES).forEach((type, i) => {
+      const y = 62 + i * 34, links = typeLinks(type);
+      if (i % 2 === 0) { ctx.fillStyle = '#f1e9cf'; roundRect(32, y - 19, 416, 30, 4); ctx.fill(); }
+      badge(type, 42, y);
+      text('ชนะทาง', 96, y + 1, 11, '#2f8a3a', 'left', true);
+      badges(links.beats, 142, y);
+      text('แพ้ทาง', 282, y + 1, 11, '#c0442f', 'left', true);
+      badges(links.weakTo, 322, y);
+    });
+    text('กดปุ่มใดก็ได้เพื่อปิด', 444, 300, 10, '#5a5048', 'right');
+  }
+
+  // Everything about one monster: stats, weaknesses, its moves, what comes next.
+  function drawCard(m) {
+    const sp = SPECIES[m.sp], st = stats(m), links = typeLinks(sp.type);
+    box(40, 12, 400, 296);
+    ctx.fillStyle = '#e9f0d8'; roundRect(52, 24, 100, 100, 6); ctx.fill();
+    const im = IMG['monsters/' + sp.img], k = 96 / Math.max(im.width, im.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(im, 102 - im.width * k / 2, 122 - im.height * k, im.width * k, im.height * k);
+    text(sp.name, 164, 42, 15, '#2b2420', 'left', true);
+    badge(sp.type, 170 + ctx.measureText(sp.name).width, 40);
+    text('Lv.' + m.level, 428, 42, 12, '#5a5048', 'right');
+    text('HP', 164, 61, 9, '#c0442f', 'left', true);
+    hpBar(182, 54, 170, m.hp, st.hp);
+    text(m.hp + ' / ' + st.hp, 428, 62, 11, '#5a5048', 'right');
+    text('โจมตี ' + st.atk + '    ป้องกัน ' + st.def + '    ความเร็ว ' + st.spd, 164, 82, 11, '#2b2420');
+    text('แพ้ธาตุ', 164, 102, 11, '#c0442f', 'left', true);
+    badges(links.weakTo, 206, 101);
+    text('ต้านธาตุ', 164, 121, 11, '#2f8a3a', 'left', true);
+    badges(links.resists, 212, 120);
+
+    text('ท่าโจมตี  (จำได้สูงสุด ' + MAX_MOVES + ' ท่า)', 56, 146, 12, '#2b2420', 'left', true);
+    for (let i = 0; i < MAX_MOVES; i++) {
+      const x = 56 + (i % 2) * 190, y = 168 + Math.floor(i / 2) * 26;
+      ctx.fillStyle = '#f1e9cf'; roundRect(x - 4, y - 15, 184, 22, 4); ctx.fill();
+      const id = m.moves[i];
+      if (!id) { text('-', x + 4, y, 12, '#a39c8c'); continue; }
+      text(MOVES[id].name, x + 2, y, 12, '#2b2420');
+      setFont(12);
+      badge(MOVES[id].type, x + 8 + ctx.measureText(MOVES[id].name).width, y - 1);
+      text(String(MOVES[id].power), x + 174, y, 11, '#5a5048', 'right');
+    }
+    const next = sp.moves.find(([lv, id]) => lv > m.level && !m.moves.includes(id));
+    text(next ? 'ท่าถัดไป : ' + MOVES[next[1]].name + ' ที่ Lv.' + next[0] : 'ท่าถัดไป : เรียนครบทุกท่าแล้ว', 56, 226, 11, '#5a5048');
+    text(sp.evolve ? 'วิวัฒนาการ : เป็น' + SPECIES[sp.evolve.to].name + ' ที่ Lv.' + sp.evolve.level : 'วิวัฒนาการ : ร่างสุดท้ายแล้ว', 56, 244, 11, '#5a5048');
   }
 
   function drawTitle() {
@@ -971,7 +1264,7 @@
 
   function drawUI() {
     if (mode === 'title') drawTitleText();
-    if (mode === 'battle' && bt) drawHud();
+    if (mode === 'battle' && bt && !bt.evo) drawHud();
     if (ui.portrait) {
       box(VW - 8 - 104, 30, 104, 104);
       ctx.imageSmoothingEnabled = false;
@@ -980,6 +1273,15 @@
     if (ui.msg || ui.prompt || mode === 'battle') box(4, 236, 472, 80);
     if (ui.prompt && !ui.msg) wrap(ui.prompt, 230, 13).forEach((l, i) => text(l, 20, 259 + i * 19, 13));
     if (ui.msg) drawMessage(ui.msg);
+    if (ui.banner && mode === 'world') {                    // place name, sliding in and out at the top
+      const t = ui.banner.t, k = Math.min(1, t / 0.25, (2.6 - t) / 0.25);
+      setFont(13, true);
+      const w = ctx.measureText(ui.banner.text).width + 40;
+      box(240 - w / 2, -30 + 38 * k, w, 28);
+      text(ui.banner.text, 240, -30 + 38 * k + 19, 13, '#2b2420', 'center', true);
+    }
+    if (ui.chart) drawTypeChart();
+    if (ui.card) drawCard(ui.card);
     if (ui.menu) drawMenu(ui.menu);
     if (ui.fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + ui.fade + ')'; ctx.fillRect(0, 0, VW, VH); }
     if (ui.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + ui.flash + ')'; ctx.fillRect(0, 0, VW, VH); }
@@ -996,6 +1298,7 @@
       if (tw.t >= 1) { tweens.splice(i, 1); tw.resolve(); }
     }
     if (ui.msg) ui.msg.shown += dt * 48;
+    if (ui.banner && (ui.banner.t += dt) > 2.6) ui.banner = null;
     updateVirtual(dt);
     if (mode === 'world') updateWorld(dt);
   }

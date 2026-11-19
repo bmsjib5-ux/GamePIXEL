@@ -184,16 +184,80 @@ for who in ["researcher", "rival", "shopkeeper", "healer"]:
 # ------------------------------------------------- lineups (NPCs, monsters)
 
 
+def split_by_shape(a, n):
+    """Separate n sprites that have no clean gap between them.
+
+    Finds every connected blob of opaque pixels, takes the n biggest as the sprites'
+    bodies, and gives each loose bit (bubble, spark) to the nearest body. Returns the
+    sprites left to right as (boxes, masks); a mask marks the sprite's own pixels in its box.
+    """
+    alpha = a[..., 3] > 0
+    parent = []
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    runs, prev = [], []                     # runs: (row, start, end, id)
+    for y in range(alpha.shape[0]):
+        d = np.diff(np.concatenate(([0], alpha[y].astype(np.int8), [0])))
+        cur = []
+        for s0, e0 in zip(np.flatnonzero(d == 1), np.flatnonzero(d == -1)):
+            rid = len(parent)
+            parent.append(rid)
+            for ps, pe, pid in prev:        # touches a run in the row above (diagonals count)
+                if ps <= e0 and pe >= s0:
+                    ra, rb = find(rid), find(pid)
+                    if ra != rb:
+                        parent[max(ra, rb)] = min(ra, rb)
+            cur.append((int(s0), int(e0), rid))
+            runs.append((y, int(s0), int(e0), rid))
+        prev = cur
+    blobs = {}
+    for y, s0, e0, rid in runs:
+        blobs.setdefault(find(rid), []).append((y, s0, e0))
+    info = []
+    for root, rs in blobs.items():
+        area = sum(e0 - s0 for _, s0, e0 in rs)
+        if area < 40:
+            continue                        # stray speck
+        x0, x1 = min(r[1] for r in rs), max(r[2] for r in rs)
+        info.append({"runs": rs, "area": area, "cx": (x0 + x1) / 2})
+    info.sort(key=lambda b: -b["area"])
+    bodies = sorted(info[:n], key=lambda b: b["cx"])
+    assert len(bodies) == n, ("blobs", len(info))
+    for extra in info[n:]:
+        min(bodies, key=lambda b: abs(b["cx"] - extra["cx"]))["runs"].extend(extra["runs"])
+    boxes, masks = [], []
+    for body in bodies:
+        rs = body["runs"]
+        x0, x1 = min(r[1] for r in rs), max(r[2] for r in rs)
+        y0, y1 = min(r[0] for r in rs), max(r[0] for r in rs) + 1
+        m = np.zeros((y1 - y0, x1 - x0), bool)
+        for y, s0, e0 in rs:
+            m[y - y0, s0 - x0:e0 - x0] = True
+        boxes.append((x0, y0, x1, y1))
+        masks.append(m)
+    return boxes, masks
+
+
 HEIGHTS = {}  # sprite name -> (height in pixels, gap below it)
 
 
-def lineup(src, names, cell_w, cell_h, folder, sheet_name, colors, match=None):
-    """match: names of already-sliced sprites whose height each sprite should copy."""
+def lineup(src, names, cell_w, cell_h, folder, sheet_name, colors, match=None, each=False):
+    """match: names of already-sliced sprites whose height each sprite should copy.
+    each: scale every sprite on its own to fill its cell, instead of one scale for the sheet."""
     a = load(src)
+    masks = None
     for col_gap in (25, 16, 10, 6):      # sprites drawn close together need a smaller gap
         boxes = find_sprites(a, col_gap=col_gap)[0]
         if len(boxes) == len(names):
             break
+    else:
+        # No clean vertical gaps (one sprite reaches over another): separate them by shape.
+        boxes, masks = split_by_shape(a, len(names))
     assert len(boxes) == len(names), (src, len(boxes))
     max_w = max(b[2] - b[0] for b in boxes)
     max_h = max(b[3] - b[1] for b in boxes)
@@ -206,6 +270,8 @@ def lineup(src, names, cell_w, cell_h, folder, sheet_name, colors, match=None):
         if match:
             scale = min(HEIGHTS[match[i]][0] / bh, cell_w / bw)
             gap = HEIGHTS[match[i]][1]
+        elif each:
+            scale, gap = min(cell_w / bw, cell_h / bh), 0
         else:
             scale = sheet_scale
             gap = round((floor - b[3]) * scale)
@@ -213,7 +279,13 @@ def lineup(src, names, cell_w, cell_h, folder, sheet_name, colors, match=None):
         tw = min(cell_w, max(1, round(bw * scale)))
         th = min(cell_h - gap, max(1, round(bh * scale)))
         HEIGHTS[n] = (th, gap)
-        spr = reduce_palette(resample(a, b, tw, th), colors)
+        if masks is None:
+            spr = resample(a, b, tw, th)
+        else:                            # only this sprite's own pixels, even inside its box
+            own = a[b[1]:b[3], b[0]:b[2]].copy()
+            own[~masks[i]] = 0
+            spr = resample(own, (0, 0, bw, bh), tw, th)
+        spr = reduce_palette(spr, colors)
         cell = place(cell_w, cell_h, spr, (cell_w - tw) // 2, gap)
         sheet[:, i * cell_w:(i + 1) * cell_w] = cell
         save(cell, folder, f"{n}.png")
@@ -259,6 +331,23 @@ for src, names in [
     if os.path.exists(os.path.join(SRC, src + "_back.png")):
         new_strips.append(lineup(src + "_back.png", [n + "_back" for n in names], 64, 64, "monsters",
                                  src[9:] + "_back_64x64.png", 24, match=names))
+
+# Evolved forms of the first six monsters: stage 1 and stage 2, front and back.
+# They get bigger cells than the 64x64 base forms, so a monster visibly grows when it evolves.
+BASE_NAMES = {"starters": ["starter_fire_lamb", "starter_water_narwhal", "starter_leaf_pangolin"],
+              "wild": ["wild_electric_beetle", "wild_rock_tortoise", "wild_ghost_moth"]}
+EVO_CELL = {"evo1": 72, "evo2": 80}
+for group, base in BASE_NAMES.items():
+    for stage, cell in EVO_CELL.items():
+        src = f"monsters_{group}_{stage}"
+        if not os.path.exists(os.path.join(SRC, src + ".png")):
+            continue
+        names = [f"{n}_{stage}" for n in base]
+        new_strips.append(lineup(src + ".png", names, cell, cell, "monsters",
+                                 f"{group}_{stage}_{cell}x{cell}.png", 28, each=True))
+        if os.path.exists(os.path.join(SRC, src + "_back.png")):
+            new_strips.append(lineup(src + "_back.png", [n + "_back" for n in names], cell, cell, "monsters",
+                                     f"{group}_{stage}_back_{cell}x{cell}.png", 28, match=names))
 
 walk_strips = [np.hstack([s[i * H:(i + 1) * H] for i in range(4)]) for s in [sheet] + npc_walks]
 strips = walk_strips + [npc_large, np.hstack([starters, wild])]

@@ -21,10 +21,11 @@ function rect(c0, r0, c1, r1) {
 }
 function cells(list) { return new Set(list.map(([c, r]) => cellKey(c, r))); }
 function union(...sets) { const s = new Set(); for (const x of sets) for (const k of x) s.add(k); return s; }
-const outsideMap = (c, r) => c < 0 || r < 0 || c >= MAP_W || r >= MAP_H;
 
 // Picks the right piece (edge, corner, inner corner, centre) for every cell of a patch.
-function autotile(kind, set, runsOffMap) {
+// w, h = the map's size, so a patch can be told to carry on past the map's edge.
+function autotile(kind, set, runsOffMap, w = MAP_W, h = MAP_H) {
+  const outsideMap = (c, r) => c < 0 || r < 0 || c >= w || r >= h;
   const has = (c, r) => (runsOffMap && outsideMap(c, r)) || set.has(cellKey(c, r));
   const out = new Map();
   for (const k of set) {
@@ -45,9 +46,10 @@ function autotile(kind, set, runsOffMap) {
 
 // Wide patch plus one-tile-wide strips of the same terrain (narrow path, river).
 const STRIP_NAMES = { path: ['path_narrow_', 'path_join_'], pond: ['river_', 'river_join_'] };
-function stripLayout(kind, wide, narrow, runsOffMap) {
+function stripLayout(kind, wide, narrow, runsOffMap, w = MAP_W, h = MAP_H) {
+  const outsideMap = (c, r) => c < 0 || r < 0 || c >= w || r >= h;
   const [narrowPrefix, joinPrefix] = STRIP_NAMES[kind];
-  const names = autotile(kind, wide, runsOffMap);
+  const names = autotile(kind, wide, runsOffMap, w, h);
   const step = { n: [0, -1], e: [1, 0], s: [0, 1], w: [-1, 0] };
   const joins = (c, r) => (runsOffMap && outsideMap(c, r)) || narrow.has(cellKey(c, r)) || wide.has(cellKey(c, r));
   for (const k of narrow) {
@@ -79,7 +81,7 @@ function mapBuilder(id, w, h, fill) {
   const ground = [];
   for (let r = 0; r < h; r++) ground.push(new Array(w).fill(fill));
   const m = { id, w, h, ground, blocked: new Uint8Array(w * h), things: [], interact: new Map(),
-              tall: new Map(), npcs: [], warps: new Map(), indoor: false };
+              tall: new Map(), npcs: [], warps: new Map(), exits: [], indoor: false };
   const block = (c, r) => { if (c >= 0 && r >= 0 && c < w && r < h) m.blocked[r * w + c] = 1; };
   // Places a sprite with its bottom-left corner on cell (c, r).
   // opts: id = what happens when examined, walkable, flat = lies on the floor, dx / dy = pixel nudge
@@ -209,11 +211,7 @@ function buildVillage() {
     for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = 'tall_grass'; m.tall.set(k, area); }
   }
 
-  // ---- ground that cannot be walked on
-  for (let r = 0; r < MAP_H; r++) for (let c = 0; c < MAP_W; c++) {
-    const g = ground[r][c];
-    if (g.startsWith('pond_') || g.startsWith('plateau_') || (g.startsWith('river_') && !g.startsWith('river_bridge'))) block(c, r);
-  }
+  blockTerrain(m, block);
 
   const object = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
   // The building's door lines up with its room's door cell; walking into the door enters the room.
@@ -259,12 +257,95 @@ function buildVillage() {
 
   m.things.sort((a, b) => a.sortY - b.sortY);
   m.npcs.push({ id: 'researcher', sheet: 'chars/npc_researcher', c: 16, r: 10, dir: 'down' });
-  m.npcs.push({ id: 'rival', sheet: 'chars/npc_rival', c: 15, r: 23, dir: 'up' });
+  // the rival blocks the way south until he is beaten, then waits on Route 1
+  m.npcs.push({ id: 'rival', sheet: 'chars/npc_rival', c: 15, r: 23, dir: 'up', hideIf: 'rivalBeaten' });
+  // walking off the bottom of the road leads to Route 1 (stage 2)
+  m.exits.push({ side: 'down', c0: 14, c1: 16, to: { map: 'route1', dc: -1, r: 0 }, need: 'rivalBeaten',
+                 lockedText: 'ทางไปเส้นทางที่ 1 อยู่ข้างหน้า\nแต่ต้องประลองชนะพายุที่ยืนอยู่บนถนนก่อน' });
+  return m;
+}
+
+// Water, river and raised ground cannot be walked on (bridges can).
+function blockTerrain(m, block) {
+  for (let r = 0; r < m.h; r++) for (let c = 0; c < m.w; c++) {
+    const g = m.ground[r][c];
+    if (g.startsWith('pond_') || g.startsWith('plateau_') || (g.startsWith('river_') && !g.startsWith('river_bridge'))) block(c, r);
+  }
+}
+
+// Stage 2: Route 1. The road winds south across a river; the second set of monsters lives
+// in its tall grass, and the rival waits near the far end.
+const R1_W = 28, R1_H = 36;
+function buildRoute1() {
+  const rng = seededRandom(20261120);
+  const B = mapBuilder('route1', R1_W, R1_H, 'grass');
+  const m = B.m, ground = m.ground, block = B.block;
+  m.title = 'เส้นทางที่ 1';
+  for (let r = 0; r < R1_H; r++) for (let c = 0; c < R1_W; c++) {
+    const v = rng();
+    ground[r][c] = v < 0.70 ? 'grass' : v < 0.88 ? 'grass_tufts' : v < 0.94 ? 'grass_white_flowers' : 'grass_color_flowers';
+  }
+  const put = (layout) => { for (const [k, name] of layout) { const [c, r] = k.split(',').map(Number); ground[r][c] = name; } };
+
+  // ---- the road: in at the top, west, down to the river, east, and out at the bottom.
+  // It narrows to one tile to cross the river on a plank bridge.
+  const road = union(rect(13, 0, 15, 9), rect(5, 7, 15, 9), rect(5, 7, 7, 11),
+                     rect(5, 15, 7, 19), rect(5, 17, 21, 19), rect(19, 17, 21, 35));
+  put(stripLayout('path', road, cells(line(6, 12, 6, 14)), true, R1_W, R1_H));
+
+  // ---- the river runs right across the map and widens into a pond on the east side
+  const pond = rect(20, 11, 25, 15);
+  const river = cells([...line(0, 13, 19, 13), ...line(26, 13, 27, 13)]);
+  put(stripLayout('pond', pond, river, true, R1_W, R1_H));
+  ground[13][6] = 'river_bridge_ns';
+
+  put(autotile('plaza', rect(7, 27, 12, 28), false, R1_W, R1_H));        // resting place with a spring
+  put(autotile('plateau', rect(23, 28, 25, 30), false, R1_W, R1_H));
+
+  // ---- tall grass: gentler north of the river, tougher in the south
+  const grass = [[rect(2, 3, 11, 5), 'route_a'], [rect(17, 3, 25, 8), 'route_a'],
+                 [rect(9, 10, 18, 12), 'route_b'], [rect(9, 14, 17, 16), 'route_b'],
+                 [rect(2, 21, 17, 26), 'route_c'], [rect(2, 29, 17, 33), 'route_c'], [rect(23, 20, 25, 26), 'route_c']];
+  for (const [set, area] of grass) {
+    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = 'tall_grass'; m.tall.set(k, area); }
+  }
+  blockTerrain(m, block);
+
+  const object = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
+  // forest on both sides (left open where the river passes), trees along the top, fence along the bottom
+  const treeKinds = ['tree_round', 'tree_pine', 'tree_round', 'tree_pine', 'tree_orange', 'tree_round', 'tree_apple', 'tree_pine'];
+  const pick = () => treeKinds[Math.floor(rng() * treeKinds.length)];
+  for (let c = 0; c < R1_W; c += 2) if (c < 12 || c > 16) object(pick(), c, 2);
+  for (let r = 4; r < R1_H; r += 2) if (r < 13 || r > 15) { object(pick(), 0, r); object(pick(), 26, r); }
+  for (let r = 0; r < R1_H; r++) { block(0, r); block(1, r); block(26, r); block(27, r); }
+  for (let c = 0; c < R1_W; c++) if (c < 12 || c > 16) for (let r = 0; r < 3; r++) block(c, r);
+  block(12, 0); block(16, 0);
+  for (let c = 2; c < 26; c++) if (c < 19 || c > 21) object('fence_h', c, 35);
+
+  object('tree_apple', 3, 20); object('tree_round', 22, 19); object('tree_pine', 3, 12);
+  object('tree_orange', 12, 23); object('tree_pine', 15, 31); object('tree_round', 4, 31);
+  object('bush', 16, 6); object('bush_berry', 3, 9); object('bush', 19, 9); object('bush', 18, 15);
+  object('bush_berry', 22, 27); object('bush', 8, 20); object('bush', 24, 33);
+  object('rocks', 12, 6); object('boulder', 24, 29); object('rocks', 3, 16); object('boulder', 17, 21); object('rocks', 22, 22);
+  object('well', 9, 28, { id: 'spring' });
+  object('signpost', 16, 2, { id: 'sign_r1_top' });
+  object('signpost', 8, 11, { id: 'sign_r1_bridge' });
+  object('signpost', 13, 27, { id: 'sign_r1_spring' });
+  object('signpost', 22, 34, { id: 'sign_r1_end' });
+  object('crate', 2, 8, { id: 'r1_crate_a' });
+  object('crate', 25, 18, { id: 'r1_crate_b' });
+  object('crate', 2, 34, { id: 'r1_crate_c' });
+
+  m.things.sort((a, b) => a.sortY - b.sortY);
+  m.npcs.push({ id: 'rival2', sheet: 'chars/npc_rival', c: 20, r: 31, dir: 'up' });
+  m.exits.push({ side: 'up', c0: 13, c1: 15, to: { map: 'village', dc: 1, r: MAP_H - 1 } });
+  m.exits.push({ side: 'down', c0: 19, c1: 21, to: null,
+                 lockedText: 'ทางไปเมืองถัดไปยังไม่เปิดในเวอร์ชันนี้\nด่าน 3 จะตามมาในอนาคต' });
   return m;
 }
 
 function buildMaps() {
-  const maps = { village: buildVillage() };
+  const maps = { village: buildVillage(), route1: buildRoute1() };
   for (const id of Object.keys(ROOMS)) maps[id] = buildRoom(id);
   return maps;
 }

@@ -1,6 +1,7 @@
 """Collect the game's images into game/assets and write js/tiles.js (tile index + sprite sizes)."""
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -41,7 +42,7 @@ for who in ("hero", "npc_researcher", "npc_rival", "npc_shopkeeper", "npc_healer
     copy(os.path.join("sprites", who, f"{who}_walk_32x48.png"), os.path.join("chars", f"{who}.png"))
 copy(r"sprites\npc_large\npc_rival.png", r"chars\rival_large.png")
 for f in sorted(os.listdir(os.path.join(SRC, "sprites", "monsters"))):
-    if "64x64" not in f:
+    if not re.search(r"_\d+x\d+\.png$", f):        # skip the combined sheets
         copy(os.path.join("sprites", "monsters", f), os.path.join("monsters", f))
 
 
