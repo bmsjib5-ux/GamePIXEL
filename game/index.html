@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>นักสะสมมอนสเตอร์ หมู่บ้านต้นกล้า</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #16161d; overflow: hidden; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center;
+         font-family: "Leelawadee UI", "Noto Sans Thai", Tahoma, sans-serif; }
+  canvas { image-rendering: pixelated; background: #000; display: block; }
+  #hint { color: #9a9aa8; font-size: 13px; margin-top: 8px; text-align: center; }
+  #hint b { color: #d8d8e4; font-weight: 600; }
+</style>
+</head>
+<body>
+<canvas id="game" width="960" height="640"></canvas>
+<div id="hint"><b>ลูกศร / WASD</b> เดิน &nbsp;·&nbsp; <b>Z / Enter / Space</b> ตกลง คุย สำรวจ &nbsp;·&nbsp; <b>X / Esc</b> เมนูทีม ยกเลิก</div>
+<script src="js/tiles.js"></script>
+<script src="js/data.js"></script>
+<script src="js/map.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

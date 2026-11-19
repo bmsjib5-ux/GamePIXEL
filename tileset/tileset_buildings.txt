@@ -1,0 +1,9 @@
+tileset_buildings.png
+name, x, y, width, height (pixels, from top-left)
+
+house_red, 0, 64, 160, 160
+house_teal, 160, 64, 160, 160
+lab_dome, 320, 32, 224, 192
+shop, 544, 32, 192, 192
+healing_center, 736, 32, 192, 192
+windmill, 928, 0, 160, 224

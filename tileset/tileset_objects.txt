@@ -1,0 +1,21 @@
+tileset_objects.png
+name, x, y, width, height (pixels, from top-left)
+
+tree_round, 0, 0, 64, 96
+tree_pine, 64, 0, 64, 96
+tree_apple, 128, 0, 64, 96
+tree_orange, 192, 0, 64, 96
+bush, 256, 64, 32, 32
+bush_berry, 288, 64, 32, 32
+boulder, 320, 64, 32, 32
+rocks, 352, 64, 32, 32
+signpost, 384, 64, 32, 32
+fence_h, 416, 64, 32, 32
+fence_v, 448, 64, 32, 32
+fence_post, 480, 64, 32, 32
+well, 512, 32, 64, 64
+flower_bed, 576, 64, 64, 32
+crate, 640, 64, 32, 32
+barrel, 672, 64, 32, 32
+bridge_deck_ew, 704, 64, 32, 32
+bridge_deck_ns, 736, 64, 32, 32

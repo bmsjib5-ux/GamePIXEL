@@ -1,0 +1,19 @@
+tileset_furniture.png
+name, x, y, width, height (pixels, from top-left)
+
+bed, 0, 0, 32, 64
+table, 32, 0, 64, 64
+stool, 96, 32, 32, 32
+bookshelf, 128, 0, 64, 64
+shop_counter, 192, 0, 96, 64
+goods_shelf, 288, 0, 64, 64
+healing_machine, 352, 0, 64, 64
+reception_desk, 416, 0, 96, 64
+computer_desk, 512, 0, 64, 64
+tank, 576, 0, 32, 64
+plant, 608, 0, 32, 64
+rug, 640, 0, 96, 64
+door_mat, 736, 32, 32, 32
+kitchen_counter, 768, 0, 64, 64
+millstone, 832, 0, 64, 64
+sacks, 896, 32, 32, 32

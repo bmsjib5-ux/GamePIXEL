@@ -1,0 +1,125 @@
+tileset_terrain_32x32.png - 32x32 tiles, 10 columns x 12 rows
+name, column, row (both counted from 0, top-left)
+suffixes: nw n ne / w c e / sw s se = the nine parts of a patch on grass
+inner_nw inner_ne inner_sw inner_se = concave corners, named by the
+quadrant of the tile that is grass (the rest of the tile is the terrain)
+path_narrow_<sides> = one-tile-wide path; <sides> lists the sides it joins
+(n e s w), e.g. ns = straight up-down, ne = bend, nes = T, dot = no joins
+path_join_<side> = edge of the wide path where a narrow path leaves that side
+river_<sides> = one-tile-wide water, named the same way as path_narrow_<sides>
+river_join_<side> = edge of the pond where a river leaves that side
+river_bridge_ew = bridge walked east-west, use in place of river_ns
+river_bridge_ns = bridge walked north-south, use in place of river_ew
+wall_upper = indoor wall without the skirting board, goes above wall_indoor
+
+grass, 0, 0
+grass_tufts, 1, 0
+grass_white_flowers, 2, 0
+grass_color_flowers, 3, 0
+tall_grass, 0, 1
+dirt, 1, 1
+sand, 2, 1
+cobble, 3, 1
+water, 0, 2
+deep_water, 1, 2
+bridge_h, 2, 2
+bridge_v, 3, 2
+floor_wood, 0, 3
+wall_indoor, 1, 3
+cliff_face, 2, 3
+stone_steps, 3, 3
+path_nw, 4, 0
+path_n, 5, 0
+path_ne, 6, 0
+path_w, 4, 1
+path_c, 5, 1
+path_e, 6, 1
+path_sw, 4, 2
+path_s, 5, 2
+path_se, 6, 2
+pond_nw, 7, 0
+pond_n, 8, 0
+pond_ne, 9, 0
+pond_w, 7, 1
+pond_c, 8, 1
+pond_e, 9, 1
+pond_sw, 7, 2
+pond_s, 8, 2
+pond_se, 9, 2
+plateau_nw, 4, 3
+plateau_n, 5, 3
+plateau_ne, 6, 3
+plateau_w, 4, 4
+plateau_c, 5, 4
+plateau_e, 6, 4
+plateau_sw, 4, 5
+plateau_s, 5, 5
+plateau_se, 6, 5
+plaza_nw, 7, 3
+plaza_n, 8, 3
+plaza_ne, 9, 3
+plaza_w, 7, 4
+plaza_c, 8, 4
+plaza_e, 9, 4
+plaza_sw, 7, 5
+plaza_s, 8, 5
+plaza_se, 9, 5
+path_inner_nw, 0, 6
+path_inner_ne, 1, 6
+path_inner_sw, 0, 7
+path_inner_se, 1, 7
+pond_inner_nw, 2, 6
+pond_inner_ne, 3, 6
+pond_inner_sw, 2, 7
+pond_inner_se, 3, 7
+plateau_inner_nw, 4, 6
+plateau_inner_ne, 5, 6
+plateau_inner_sw, 4, 7
+plateau_inner_se, 5, 7
+plaza_inner_nw, 6, 6
+plaza_inner_ne, 7, 6
+plaza_inner_sw, 6, 7
+plaza_inner_se, 7, 7
+path_narrow_dot, 0, 8
+path_narrow_n, 1, 8
+path_narrow_e, 2, 8
+path_narrow_ne, 3, 8
+path_narrow_s, 4, 8
+path_narrow_ns, 5, 8
+path_narrow_es, 6, 8
+path_narrow_nes, 7, 8
+path_narrow_w, 8, 8
+path_narrow_nw, 9, 8
+path_narrow_ew, 0, 9
+path_narrow_new, 1, 9
+path_narrow_sw, 2, 9
+path_narrow_nsw, 3, 9
+path_narrow_esw, 4, 9
+path_narrow_nesw, 5, 9
+path_join_n, 6, 9
+path_join_e, 7, 9
+path_join_s, 8, 9
+path_join_w, 9, 9
+river_dot, 0, 10
+river_n, 1, 10
+river_e, 2, 10
+river_ne, 3, 10
+river_s, 4, 10
+river_ns, 5, 10
+river_es, 6, 10
+river_nes, 7, 10
+river_w, 8, 10
+river_nw, 9, 10
+river_ew, 0, 11
+river_new, 1, 11
+river_sw, 2, 11
+river_nsw, 3, 11
+river_esw, 4, 11
+river_nesw, 5, 11
+river_join_n, 6, 11
+river_join_e, 7, 11
+river_join_s, 8, 11
+river_join_w, 9, 11
+river_bridge_ew, 0, 4
+river_bridge_ns, 1, 4
+wall_upper, 2, 4
