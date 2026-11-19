@@ -44,21 +44,56 @@ for f in sorted(os.listdir(os.path.join(SRC, "sprites", "monsters"))):
     if "64x64" not in f:
         copy(os.path.join("sprites", "monsters", f), os.path.join("monsters", f))
 
-# battle background at the game's 480x320 resolution, hard-edged
+
+
+def shrink(img, W, H):
+    """Hard-edged downscale: every output pixel takes the commonest colour of its block."""
+    sx, sy = img.shape[1] / W, img.shape[0] / H
+    out = np.zeros((H, W, 3), np.uint8)
+    for i in range(H):
+        y0, y1 = int(i * sy + 0.2 * sy), max(int((i + 1) * sy - 0.2 * sy), int(i * sy + 0.2 * sy) + 1)
+        for j in range(W):
+            x0, x1 = int(j * sx + 0.2 * sx), max(int((j + 1) * sx - 0.2 * sx), int(j * sx + 0.2 * sx) + 1)
+            px = img[y0:y1, x0:x1].reshape(-1, 3)
+            q = px.astype(np.int32) >> 3
+            key = (q[:, 0] << 10) | (q[:, 1] << 5) | q[:, 2]
+            vals, counts = np.unique(key, return_counts=True)
+            out[i, j] = px[key == vals[counts.argmax()]].mean(axis=0).round()
+    return out
+
+
+# battle background at the game's 480x320 resolution
 bg = np.array(Image.open(os.path.join(SRC, "scene_battle.png")).convert("RGB"))
-W, H = 480, 320
-sx, sy = bg.shape[1] / W, bg.shape[0] / H
-out = np.zeros((H, W, 3), np.uint8)
-for i in range(H):
-    y0, y1 = int(i * sy + 0.2 * sy), max(int((i + 1) * sy - 0.2 * sy), int(i * sy + 0.2 * sy) + 1)
-    for j in range(W):
-        x0, x1 = int(j * sx + 0.2 * sx), max(int((j + 1) * sx - 0.2 * sx), int(j * sx + 0.2 * sx) + 1)
-        px = bg[y0:y1, x0:x1].reshape(-1, 3)
-        q = px.astype(np.int32) >> 3
-        key = (q[:, 0] << 10) | (q[:, 1] << 5) | q[:, 2]
-        vals, counts = np.unique(key, return_counts=True)
-        out[i, j] = px[key == vals[counts.argmax()]].mean(axis=0).round()
-Image.fromarray(out, "RGB").save(os.path.join(A, "battle_bg.png"))
+Image.fromarray(shrink(bg, 480, 320), "RGB").save(os.path.join(A, "battle_bg.png"))
+
+# App icons (home screen, installed app, browser tab) from the square icon artwork.
+icon_src = os.path.join(SRC, "icon_source.png")
+if os.path.exists(icon_src):
+    icons = os.path.join(GAME, "icons")
+    os.makedirs(icons, exist_ok=True)
+    art = Image.open(icon_src).convert("RGB")
+    side = min(art.size)
+    left, top = (art.width - side) // 2, (art.height - side) // 2
+    art = art.crop((left, top, left + side, top + side))
+    small = Image.fromarray(shrink(np.array(art), 128, 128), "RGB")      # true pixel art
+    big = small.resize((512, 512), Image.NEAREST)                         # enlarged with hard pixels
+    big.save(os.path.join(icons, "icon-512.png"))
+    big.resize((192, 192), Image.LANCZOS).save(os.path.join(icons, "icon-192.png"))
+    big.resize((180, 180), Image.LANCZOS).save(os.path.join(icons, "apple-touch-icon.png"))
+    # Android cuts "maskable" icons to a circle or rounded shape and may hide the outer 10%,
+    # so that version gets a mirrored margin to keep the whole mascot inside the safe area.
+    # The mascot comes close to the top, right and bottom sides, so those margins repeat the
+    # edge (plain sky and grass); mirroring them would show stray bits of wool, flame and feet.
+    padded = np.pad(np.array(small), ((0, 0), (16, 0), (0, 0)), mode="reflect")
+    padded = np.pad(padded, ((16, 16), (0, 16), (0, 0)), mode="edge")
+    Image.fromarray(padded, "RGB").resize((640, 640), Image.NEAREST).save(
+        os.path.join(icons, "icon-maskable-640.png"))
+    # browser-tab icon: the mascot only, so it stays readable at 16 pixels
+    face = small.crop((16, 16, 112, 112))
+    face.resize((32, 32), Image.BOX).save(os.path.join(icons, "favicon-32.png"))
+    face.resize((48, 48), Image.BOX).save(os.path.join(GAME, "favicon.ico"),
+                                          sizes=[(16, 16), (32, 32), (48, 48)])
+    print("icons: written")
 
 index = {}
 with open(os.path.join(SRC, "tileset", "tileset_terrain_32x32.txt"), encoding="utf-8") as f:
