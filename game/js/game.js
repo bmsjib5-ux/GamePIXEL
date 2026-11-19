@@ -1,7 +1,12 @@
 'use strict';
 // Engine, user interface, overworld and battles.
 (() => {
-  const VW = 480, VH = 320;            // logical screen size in pixels
+  // Logical screen size in pixels. Menus, messages and battles are laid out in a 480x320
+  // picture (the "band"). Held upright, a phone shows a taller screen: the map fills all of
+  // it, and the band sits inside it above the on-screen buttons.
+  const VW = 480, BAND = 320;
+  let VH = BAND;                       // full height of the logical screen
+  let PADH = 0;                        // part of that height lying under the on-screen buttons
   const STEP = 0.19;                   // seconds to walk one tile
   // "?test" in the address keeps test runs in a save slot of their own
   const SAVE_KEY = 'sprout_village_save_v1' + (location.search.includes('test') ? '_test' : '');
@@ -12,7 +17,7 @@
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const buf = document.createElement('canvas');   // low-resolution picture, scaled up with hard pixels
-  buf.width = VW; buf.height = VH;
+  buf.width = VW; buf.height = BAND;
   const b = buf.getContext('2d');
   let S = 2;                                      // screen pixels per logical pixel
 
@@ -24,13 +29,34 @@
     let availH = window.innerHeight;
     if (touch && portrait) availH -= 210;                    // room for the on-screen buttons below
     else if (hint && hint.offsetHeight) availH -= hint.offsetHeight + 12;
-    const fit = Math.min(window.innerWidth * dpr / VW, availH * dpr / VH);
-    // Whole-number scaling keeps every pixel the same size. On sharp (high-dpi) screens the
-    // pixels are too small for that to matter, so fill the space instead.
-    S = dpr >= 2 && fit >= 1.5 ? fit : Math.max(1, Math.floor(fit));
-    canvas.width = Math.round(VW * S); canvas.height = Math.round(VH * S);
-    canvas.style.width = (canvas.width / dpr) + 'px';
-    canvas.style.height = (canvas.height / dpr) + 'px';
+    const full = touch && portrait;      // upright phone: use the whole screen
+    document.body.classList.toggle('fullview', full);
+    if (full) {
+      const cssPerPixel = window.innerWidth / VW;
+      VH = Math.max(BAND, Math.round(window.innerHeight / cssPerPixel));
+      PADH = Math.min(VH - BAND, Math.round(188 / cssPerPixel));   // the buttons take about 188 css px
+      S = window.innerWidth * dpr / VW;
+      canvas.width = Math.round(VW * S); canvas.height = Math.round(VH * S);
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+    } else {
+      VH = BAND; PADH = 0;
+      const fit = Math.min(window.innerWidth * dpr / VW, availH * dpr / VH);
+      // Whole-number scaling keeps every pixel the same size. On sharp (high-dpi) screens the
+      // pixels are too small for that to matter, so fill the space instead.
+      S = dpr >= 2 && fit >= 1.5 ? fit : Math.max(1, Math.floor(fit));
+      canvas.width = Math.round(VW * S); canvas.height = Math.round(VH * S);
+      canvas.style.width = (canvas.width / dpr) + 'px';
+      canvas.style.height = (canvas.height / dpr) + 'px';
+    }
+    if (buf.height !== VH) buf.height = VH;
+  }
+  // Where the 480x320 band starts on a tall screen: just above the buttons while walking
+  // (so messages are near the thumbs), centred in the free space for battles and the title.
+  function uiTop() {
+    const free = VH - PADH;
+    if (free <= BAND) return 0;
+    return mode === 'world' ? free - BAND - 4 : Math.round((free - BAND) / 2);
   }
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', () => setTimeout(resize, 200));
@@ -322,7 +348,7 @@
     canvas.addEventListener('pointerdown', (ev) => {
       ev.preventDefault();
       const r = canvas.getBoundingClientRect();
-      const x = (ev.clientX - r.left) / r.width * VW, y = (ev.clientY - r.top) / r.height * VH;
+      const x = (ev.clientX - r.left) / r.width * VW, y = (ev.clientY - r.top) / r.height * VH - uiTop();
       const m = ui.menu;
       if (!m) { press('ok', false); return; }
       const cellW = (m.w - 16) / m.cols;
@@ -488,7 +514,8 @@
     // follow the player, stopping at the map's edges; a map smaller than the screen is centred
     const mw = MAP.w * TS, mh = MAP.h * TS;
     const camX = mw <= VW ? Math.round((mw - VW) / 2) : Math.round(Math.max(0, Math.min(mw - VW, px + TS / 2 - VW / 2)));
-    const camY = mh <= VH ? Math.round((mh - VH) / 2) : Math.round(Math.max(0, Math.min(mh - VH, py + TS / 2 - VH / 2)));
+    const free = VH - PADH;
+    const camY = mh <= free ? Math.round((mh - free) / 2) : Math.round(Math.max(0, Math.min(mh - free, py + TS / 2 - free / 2)));
     b.drawImage(groundCanvas, -camX, -camY);
     const list = [];
     for (const t of MAP.things) {
@@ -1402,7 +1429,7 @@
 
   function drawTitle() {
     b.drawImage(IMG.battle_bg, 0, 0);
-    b.fillStyle = 'rgba(20,30,40,0.35)'; b.fillRect(0, 0, VW, VH);
+    b.fillStyle = 'rgba(20,30,40,0.35)'; b.fillRect(0, -2000, VW, 4000 + VH);
     b.drawImage(IMG['monsters/starter_fire_lamb'], 62, 150, 128, 128);
     b.drawImage(IMG['monsters/starter_water_narwhal'], 176, 134, 128, 128);
     b.drawImage(IMG['monsters/starter_leaf_pangolin'], 292, 150, 128, 128);
@@ -1444,14 +1471,15 @@
       const t = ui.banner.t, k = Math.min(1, t / 0.25, (2.6 - t) / 0.25);
       setFont(13, true);
       const w = ctx.measureText(ui.banner.text).width + 40;
-      box(240 - w / 2, -30 + 38 * k, w, 28);
-      text(ui.banner.text, 240, -30 + 38 * k + 19, 13, '#2b2420', 'center', true);
+      const by = -30 + 38 * k - uiTop();
+      box(240 - w / 2, by, w, 28);
+      text(ui.banner.text, 240, by + 19, 13, '#2b2420', 'center', true);
     }
     if (ui.chart) drawTypeChart();
     if (ui.card) drawCard(ui.card);
     if (ui.menu) drawMenu(ui.menu);
-    if (ui.fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + ui.fade + ')'; ctx.fillRect(0, 0, VW, VH); }
-    if (ui.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + ui.flash + ')'; ctx.fillRect(0, 0, VW, VH); }
+    if (ui.fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + ui.fade + ')'; ctx.fillRect(0, -uiTop(), VW, VH); }
+    if (ui.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + ui.flash + ')'; ctx.fillRect(0, -uiTop(), VW, VH); }
   }
 
   // --------------------------------------------------------------- main loop
@@ -1478,12 +1506,24 @@
     requestAnimationFrame(frame);
   }
   function render() {
-    b.fillStyle = '#000'; b.fillRect(0, 0, VW, VH);
-    if (mode === 'world') drawWorld(); else if (mode === 'battle' && bt) drawBattle(); else if (mode === 'title') drawTitle();
+    const top = uiTop();
+    // beyond the edge of an outdoor map there is just more grass; indoors it stays black
+    b.fillStyle = mode === 'world' && MAP && !MAP.indoor ? '#72ce37' : '#000';
+    b.fillRect(0, 0, VW, VH);
+    if (mode === 'world') drawWorld();
+    else if ((mode === 'battle' && bt) || mode === 'title') {
+      if (VH > BAND) {                 // tall screen: carry the scene's sky up and its grass down
+        b.drawImage(IMG.battle_bg, 470, 0, 1, 1, 0, 0, VW, top);
+        b.drawImage(IMG.battle_bg, 240, BAND - 1, 1, 1, 0, top + BAND, VW, VH - top - BAND);
+      }
+      b.save(); b.translate(0, top);
+      if (mode === 'title') drawTitle(); else drawBattle();
+      b.restore();
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(buf, 0, 0, canvas.width, canvas.height);
-    ctx.setTransform(S, 0, 0, S, 0, 0);
+    ctx.setTransform(S, 0, 0, S, 0, top * S);        // everything below is laid out inside the band
     if (mode === 'loading') text('กำลังโหลด...', 240, 164, 14, '#ffffff', 'center');
     else drawUI();
   }

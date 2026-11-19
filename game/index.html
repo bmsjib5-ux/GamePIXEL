@@ -29,10 +29,17 @@
   #touch { display: none; }
   body.touch #touch { display: block; }
   body.touch #hint { display: none; }
+  /* upright phone: the picture fills the screen and the buttons float over its lower part */
+  body.fullview canvas { position: fixed; left: 0; top: 0; }
+  /* over the bright map the buttons need a darker backing to stay readable */
+  body.fullview #dpad { background: rgba(20, 24, 34, 0.42); border-color: rgba(255, 255, 255, 0.55); }
+  body.fullview #btns button, body.fullview #btnFull { border-color: rgba(255, 255, 255, 0.6);
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
+  body.fullview #btnA { background: rgba(196, 62, 34, 0.72); }
+  body.fullview #btnB { background: rgba(34, 104, 190, 0.70); }
+  body.fullview #btnFull { background: rgba(20, 24, 34, 0.45); }
   @media (orientation: portrait) {
-    body.touch { justify-content: flex-start; padding-top: env(safe-area-inset-top, 0px); }
-    /* keep the full-screen button off the picture: put it above the A / B buttons */
-    #btnFull { top: auto; bottom: calc(196px + env(safe-area-inset-bottom, 0px)); }
+    body.touch { justify-content: flex-start; }
   }
   #dpad, #btns, #btnFull { position: fixed; z-index: 5; touch-action: none; }
   #dpad { left: calc(14px + env(safe-area-inset-left, 0px)); bottom: calc(22px + env(safe-area-inset-bottom, 0px));
@@ -71,9 +78,9 @@
   <button id="btnFull" type="button" aria-label="เต็มจอ">⛶</button>
 </div>
 <!-- raise ?v= whenever these files change, so browsers do not keep an old copy -->
-<script src="js/tiles.js?v=12"></script>
-<script src="js/data.js?v=12"></script>
-<script src="js/map.js?v=12"></script>
-<script src="js/game.js?v=12"></script>
+<script src="js/tiles.js?v=15"></script>
+<script src="js/data.js?v=15"></script>
+<script src="js/map.js?v=15"></script>
+<script src="js/game.js?v=15"></script>
 </body>
 </html>
