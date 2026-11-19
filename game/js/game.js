@@ -47,7 +47,8 @@
   }
   function allImages() {
     const names = ['terrain', 'battle_bg', 'chars/hero', 'chars/npc_researcher', 'chars/npc_rival',
-      'chars/npc_shopkeeper', 'chars/npc_healer', 'chars/rival_large'];
+      'chars/npc_shopkeeper', 'chars/npc_healer', 'chars/rival_large',
+      'chars/npc_gym_leader', 'chars/npc_gym_hiker', 'chars/npc_gym_kid'];
     for (const n of Object.keys(SPRITE_META.objects)) names.push('objects/' + n);
     for (const n of Object.keys(SPRITE_META.buildings)) names.push('buildings/' + n);
     for (const n of Object.keys(SPRITE_META.furniture)) names.push('furniture/' + n);
@@ -392,7 +393,8 @@
       groundCache[MAP.id] = cv;
     }
     groundCanvas = groundCache[MAP.id];
-    npcs = MAP.npcs.filter((n) => !(n.hideIf && G.flags[n.hideIf])).map((n) => ({ ...n }));
+    npcs = MAP.npcs.filter((n) => !(n.hideIf && G.flags[n.hideIf]))
+      .map((n) => (n.moved && G.flags[n.moved.flag] ? { ...n, c: n.moved.c, r: n.moved.r, dir: n.moved.dir } : { ...n }));
   }
   function placePlayer(spot) {
     pl.c = spot.c; pl.r = spot.r; pl.dir = spot.dir; pl.moving = false; pl.t = 0;
@@ -426,7 +428,8 @@
     if (c < 0 || r < 0 || c >= MAP.w || r >= MAP.h) {        // walking off the map: an exit, or nothing
       const exit = MAP.exits.find((e) => e.side === d && pl.c >= e.c0 && pl.c <= e.c1);
       if (!exit) return;
-      if (!exit.to || (exit.need && !G.flags[exit.need])) run(async () => { await say(exit.lockedText); });
+      if (exit.need && !G.flags[exit.need]) run(async () => { await say(exit.lockedText); });
+      else if (!exit.to) run(async () => { await say(exit.soonText || exit.lockedText); });
       else run(() => travel({ map: exit.to.map, c: pl.c + exit.to.dc, r: exit.to.r, dir: d }));
       return;
     }
@@ -588,7 +591,7 @@
 
     // ---- Route 1 (stage 2)
     async rival2() {
-      if (G.flags.stage2) { await say('นายเก่งขึ้นทุกวันเลย... เมืองถัดไปอยู่ทางใต้ แต่ทางยังปิดอยู่\nไว้เจอกันใหม่ที่นั่น!'); return; }
+      if (G.flags.stage2) { await say(G.flags.badge1 ? 'ได้เหรียญศิลามาแล้วเหรอ! สมกับที่ชนะฉันได้\nไว้เจอกันที่ด่าน 3 นะ' : 'นายเก่งขึ้นทุกวันเลย... ไปท้ายิมศิลาให้ได้เหรียญมาสิ\nยิมอยู่ทางตะวันตกของถนนนี่เอง'); return; }
       if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปดื่มน้ำพุฟื้นพลังก่อนเถอะ'); return; }
       await say('มาถึงจนได้! ฉันฝึกที่นี่จนมอนสเตอร์วิวัฒนาการแล้วนะ\nคราวนี้ฉันมีสองตัว รับมือให้ได้ล่ะ!');
       const team = RIVAL_REMATCH.map(([sp, lv]) => makeMon(sp === 'starter2' ? RIVAL_PICK[G.flags.starter] + '2' : sp, lv));
@@ -597,10 +600,37 @@
         G.flags.stage2 = true;
         G.bag.capsule += 5; G.bag.potion += 3;
         await say('แพ้อีกแล้ว... ยอมรับเลยว่านายเก่งจริง\nเอาแคปซูล 5 ลูกกับยา 3 ขวดนี่ไป');
-        await say('ยินดีด้วย! คุณผ่านด่าน 2 เส้นทางที่ 1 แล้ว');
+        await say('ถ้าจะไปเมืองถัดไป ต้องชนะยิมศิลาแล้วเอาเหรียญมาให้ได้ก่อนนะ\nยิมอยู่ทางตะวันตกของถนนนี่เอง');
         save();
       }
     },
+    // ---- the Rock Gym
+    async gym_hiker() { await gymTrainer('hiker', 'gym_hiker',
+      'โฮ่! ผู้ท้าชิงคนใหม่สินะ จะไปถึงหัวหน้ายิมต้องผ่านฉันไปก่อน!',
+      'แรงดีไม่มีตก! ผ่านไปได้เลย แต่คนข้างในเก่งกว่าฉันนะ',
+      'ฝึกปีนเขาทุกวันขาจะแข็งแรง มอนสเตอร์ก็เหมือนกัน'); },
+    async gym_kid() { await gymTrainer('kid', 'gym_kid',
+      'หนูสำรวจถ้ำมาทั่วแล้ว มอนสเตอร์หินของหนูไม่แพ้ใครหรอก!',
+      'แพ้จนได้... พี่เก่งจัง หัวหน้ายิมรออยู่ข้างในแล้วค่ะ',
+      'ธาตุหินแพ้ทางน้ำกับพืชนะ พี่รู้อยู่แล้วใช่ไหม'); },
+    async gym_leader() {
+      const g = GYM.leader;
+      if (G.flags[g.flag]) { await say('เหรียญศิลาเหมาะกับเธอดีนะ\nด่าน 3 รออยู่ทางใต้ ขอให้โชคดี'); return; }
+      if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของเธอหมดแรงหมดแล้ว ไปฟื้นพลังที่ลานน้ำพุก่อนเถอะ'); return; }
+      await say('ยินดีต้อนรับสู่ยิมศิลา! ฉันคือศิลา หัวหน้ายิมแห่งนี้');
+      await say('มอนสเตอร์ธาตุหินของฉันแข็งแกร่งดั่งภูผา\nมาดูกันว่าเธอคู่ควรกับเหรียญศิลาหรือไม่!');
+      const result = await battle(g.team.map(([sp, lv]) => makeMon(sp, lv)), { name: g.name, sheet: 'chars/npc_gym_leader' });
+      if (result !== 'win') return;
+      G.flags[g.flag] = true;
+      G.bag.potion += 3;
+      await say('ยอดเยี่ยม! เธอแข็งแกร่งจริง ๆ\nรับเหรียญศิลานี้ไป เป็นหลักฐานว่าเธอชนะยิมแห่งนี้');
+      await say('ได้รับเหรียญศิลา และยา 3 ขวด!');
+      await say('ยินดีด้วย! คุณผ่านด่าน 2 แล้ว\nด่านตรวจทางใต้ของเส้นทางที่ 1 จะเปิดทางไปด่าน 3 ให้');
+      save();
+    },
+    async gym_books() { await say('ตำรายิมศิลา\n"ธาตุหินชนะทางไฟ ไฟฟ้า และปกติ แต่แพ้ทางน้ำกับพืช"'); },
+    async sign_gym() { await say('ยิมศิลา\nชนะหัวหน้ายิมเพื่อรับเหรียญศิลา ใช้ผ่านด่านตรวจไปด่าน 3'); },
+
     async spring() {
       await say('น้ำพุใสเย็นไหลออกมาจากบ่อหิน\nมอนสเตอร์ทั้งทีมได้ดื่มน้ำจนสดชื่น');
       if (!G.party.length) return;
@@ -611,7 +641,7 @@
     async sign_r1_top() { await say('เส้นทางที่ 1\nทิศเหนือ : หมู่บ้านต้นกล้า   ทิศใต้ : สะพานข้ามแม่น้ำ'); },
     async sign_r1_bridge() { await say('สะพานไม้ข้ามแม่น้ำ\nพงหญ้าฝั่งใต้มีมอนสเตอร์แข็งแกร่งกว่าฝั่งเหนือ'); },
     async sign_r1_spring() { await say('ลานน้ำพุ\nสำรวจบ่อน้ำเพื่อฟื้นพลังมอนสเตอร์ได้ทุกเมื่อ'); },
-    async sign_r1_end() { await say('ทิศใต้ : เมืองถัดไป (ยังไม่เปิด)'); },
+    async sign_r1_end() { await say('ทิศใต้ : ด่านตรวจ ทางไปด่าน 3\nต้องมีเหรียญศิลาจากยิมจึงจะผ่านได้'); },
     async r1_crate_a() {
       if (G.flags.r1a) { await say('ลังไม้ว่างเปล่า'); return; }
       G.flags.r1a = true; G.bag.capsule += 3;
@@ -677,6 +707,25 @@
     },
   };
 
+  // A trainer who blocks the way in the gym: fight once, then they step aside for good.
+  async function gymTrainer(key, npcId, hello, beaten, later) {
+    const g = GYM[key];
+    if (G.flags[g.flag]) { await say(later); return; }
+    if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของเธอหมดแรงหมดแล้ว ไปฟื้นพลังที่ลานน้ำพุก่อนเถอะ'); return; }
+    await say(hello);
+    const npc = npcs.find((n) => n.id === npcId);
+    const result = await battle(g.team.map(([sp, lv]) => makeMon(sp, lv)), { name: g.name, sheet: npc.sheet });
+    if (result !== 'win') return;
+    G.flags[g.flag] = true;
+    await say(beaten);
+    const spot = MAP.npcs.find((n) => n.id === npcId).moved;
+    await fadeTo(1, 160);
+    const here = npcs.find((n) => n.id === npcId);
+    if (here) { here.c = spot.c; here.r = spot.r; here.dir = spot.dir; }
+    await fadeTo(0, 160);
+    save();
+  }
+
   async function teamScreen() {
     let at = 0;
     for (;;) {
@@ -686,7 +735,8 @@
       const i = await choose(opts, {
         x: 50, y: 24, w: 380, rowH: 30, cancellable: true, start: at,
         title: G.party.length ? 'ทีมมอนสเตอร์  (เลือกเพื่อดูข้อมูล)' : 'ยังไม่มีมอนสเตอร์ในทีม',
-        footer: 'แคปซูล ' + G.bag.capsule + '   ยา ' + G.bag.potion + '   จับได้ ' + goalCaught().length + '/6 ชนิด' });
+        footer: 'แคปซูล ' + G.bag.capsule + '   ยา ' + G.bag.potion + '   จับได้ ' + goalCaught().length + '/6 ชนิด'
+          + '   เหรียญ ' + (G.flags.badge1 ? 1 : 0) });
       if (i < 0) break;
       at = i;
       if (i === G.party.length) {          // the type table
@@ -741,7 +791,7 @@
       hp: { me: lead.hp, foe: foes[0].hp },
       spr: { me: { dx: -220, dy: 0, alpha: 1, blink: false }, foe: { dx: 220, dy: 0, alpha: 1, blink: false } },
       trainerX: trainer ? 0 : null, capsule: null, showMe: true, showFoe: !trainer,
-      fx: null, evo: null, evolving: [],
+      fx: null, evo: null, evolving: [], pop: null,
     };
     mode = 'battle';
     const foeName = () => trainer ? nm(bt.foe) + 'ของ' + trainer.name : nm(bt.foe) + 'ป่า';
@@ -782,6 +832,9 @@
       hit.blink = false;
       const from = def.hp;
       def.hp = Math.max(0, def.hp - dmg);
+      bt.pop = { text: '-' + dmg, x: SPOT[other].x + (other === 'foe' ? -58 : 62), y: SPOT[other].y - 96, t: 0,
+                 color: eff > 1 ? '#ffd23f' : eff < 1 ? '#c8c8d0' : '#ffffff', big: eff > 1 };
+      tween(900, (t) => { if (bt && bt.pop) bt.pop.t = t; }).then(() => { if (bt) bt.pop = null; });
       await tween(350, (t) => { bt.hp[other] = from + (def.hp - from) * t; });
       const versus = 'ธาตุ' + TYPES[mv.type].name + (eff > 1 ? 'ชนะทาง' : 'แพ้ทาง') + 'ธาตุ' + TYPES[SPECIES[def.sp].type].name;
       if (eff > 1) await say('ได้ผลดีเยี่ยม! ' + versus); else if (eff < 1) await say('ไม่ค่อยได้ผล... ' + versus);
@@ -1069,7 +1122,8 @@
       b.drawImage(im, Math.round(SPOT[side].x - w / 2 + s.dx), Math.round(SPOT[side].y + drop - h + s.dy), w, h);
       b.globalAlpha = 1;
     };
-    if (bt.trainerX !== null) b.drawImage(IMG[bt.trainer.img], Math.round(SPOT.foe.x - 80 + bt.trainerX), SPOT.foe.y - 150, 160, 160);
+    if (bt.trainerX !== null && bt.trainer.img) b.drawImage(IMG[bt.trainer.img], Math.round(SPOT.foe.x - 80 + bt.trainerX), SPOT.foe.y - 150, 160, 160);
+    else if (bt.trainerX !== null) b.drawImage(IMG[bt.trainer.sheet], 0, 0, 32, 48, Math.round(SPOT.foe.x - 48 + bt.trainerX), SPOT.foe.y - 138, 96, 144);
     if (bt.showFoe) mon('foe', bt.foe, false);
     if (bt.capsule) {
       const x = Math.round(bt.capsule.x), y = Math.round(bt.capsule.y);
@@ -1265,6 +1319,18 @@
   function drawUI() {
     if (mode === 'title') drawTitleText();
     if (mode === 'battle' && bt && !bt.evo) drawHud();
+    if (mode === 'battle' && bt && bt.pop) {                // damage number: pops up, rises, fades
+      const p = bt.pop, rise = 1 - Math.pow(1 - p.t, 3);
+      const size = (p.big ? 24 : 20) * (p.t < 0.12 ? 0.6 + p.t / 0.12 * 0.4 : 1);
+      ctx.globalAlpha = p.t > 0.75 ? Math.max(0, (1 - p.t) / 0.25) : 1;
+      setFont(size, true);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#2b2420'; ctx.lineWidth = 5;
+      ctx.strokeText(p.text, p.x, p.y - rise * 30);
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, p.x, p.y - rise * 30);
+      ctx.globalAlpha = 1;
+    }
     if (ui.portrait) {
       box(VW - 8 - 104, 30, 104, 104);
       ctx.imageSmoothingEnabled = false;

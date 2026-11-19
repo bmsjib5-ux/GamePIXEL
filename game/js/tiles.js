@@ -149,6 +149,15 @@ const SPRITE_META = {
   }
  },
  "buildings": {
+  "gym": {
+   "w": 192,
+   "h": 192,
+   "x0": 0,
+   "x1": 192,
+   "y0": 23,
+   "y1": 192,
+   "door": 96
+  },
   "healing_center": {
    "w": 192,
    "h": 192,

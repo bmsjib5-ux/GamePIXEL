@@ -204,5 +204,13 @@ const ENCOUNTERS = {
 // the rival's team for the rematch at the end of Route 1: [species, level]; "starter2" is
 // the first evolution of the starter he took
 const RIVAL_REMATCH = [['rooster', 9], ['starter2', 10]];
+
+// The Rock Gym on Route 1. Two trainers stand in the way of the leader; beating the leader
+// gives the badge that opens the road to stage 3. team: [species, level]
+const GYM = {
+  hiker:  { name: 'นักปีนเขาภูผา',   flag: 'gym1',   team: [['snail', 8], ['buffalo', 9]] },
+  kid:    { name: 'นักสำรวจน้องแก้ว', flag: 'gym2',   team: [['tortoise', 10], ['crab', 10]] },
+  leader: { name: 'หัวหน้ายิมศิลา',   flag: 'badge1', team: [['snail', 11], ['buffalo', 12], ['tortoise2', 13]] },
+};
 const ENCOUNTER_CHANCE = 0.13;
 const PARTY_MAX = 6;

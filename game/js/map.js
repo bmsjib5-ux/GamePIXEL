@@ -98,7 +98,8 @@ function mapBuilder(id, w, h, fill) {
 }
 
 // Rooms: w x h cells where the top two rows are wall; exit = column of the door mat;
-// door = [column, row] of the building's door cell in the village.
+// door = [column, row] of the building's door cell on the map it stands on
+// (from, the village unless given); floor = ground tile, wooden boards unless given.
 const ROOMS = {
   home:  { w: 9,  h: 8, exit: 4, door: [6, 7] },
   lab:   { w: 13, h: 9, exit: 6, door: [15, 7] },
@@ -106,11 +107,12 @@ const ROOMS = {
   house: { w: 9,  h: 8, exit: 4, door: [6, 17] },
   shop:  { w: 11, h: 8, exit: 5, door: [25, 18] },
   mill:  { w: 9,  h: 8, exit: 4, door: [28, 25] },
+  gym:   { w: 13, h: 12, exit: 6, door: [13, 25], from: 'route1', floor: 'cobble' },
 };
 
 function buildRoom(id) {
   const spec = ROOMS[id];
-  const B = mapBuilder(id, spec.w, spec.h + 1, 'floor_wood');   // one extra row below: the doorway
+  const B = mapBuilder(id, spec.w, spec.h + 1, spec.floor || 'floor_wood');   // one extra row below: the doorway
   const m = B.m;
   m.indoor = true;
   for (let c = 0; c < spec.w; c++) {
@@ -119,7 +121,7 @@ function buildRoom(id) {
     B.block(c, 0); B.block(c, 1); B.block(c, spec.h);
   }
   B.sprite('furniture', 'door_mat', spec.exit, spec.h - 1, { walkable: true, flat: true });
-  m.warps.set(cellKey(spec.exit, spec.h), { map: 'village', c: spec.door[0], r: spec.door[1] + 1, dir: 'down' });
+  m.warps.set(cellKey(spec.exit, spec.h), { map: spec.from || 'village', c: spec.door[0], r: spec.door[1] + 1, dir: 'down' });
   const f = (name, c, r, opts) => B.sprite('furniture', name, c, r, opts);
   const o = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
 
@@ -162,6 +164,20 @@ function buildRoom(id) {
     f('plant', 1, 2);
     m.npcs.push({ id: 'shopkeeper', sheet: 'chars/npc_shopkeeper', c: 3, r: 3, dir: 'down' });
     B.block(2, 3); B.block(4, 3);        // only the shopkeeper goes behind the counter
+  } else if (id === 'gym') {
+    // Two walls of boulders cross the hall. A trainer stands in the only gap of each and
+    // steps aside once beaten; the leader waits on the rug at the far end.
+    f('rug', 5, 3, { walkable: true, flat: true });
+    for (const row of [5, 8]) {
+      for (let c = 0; c < spec.w; c++) if (c !== 6) o((c + row) % 3 ? 'boulder' : 'rocks', c, row);
+    }
+    f('plant', 0, 2); f('plant', 12, 2); f('plant', 0, 11); f('plant', 12, 11);
+    f('bookshelf', 1, 2, { id: 'gym_books' }); f('bookshelf', 10, 2, { id: 'gym_books' });
+    m.npcs.push({ id: 'gym_hiker', sheet: 'chars/npc_gym_hiker', c: 6, r: 8, dir: 'down',
+                  moved: { flag: 'gym1', c: 7, r: 9, dir: 'left' } });
+    m.npcs.push({ id: 'gym_kid', sheet: 'chars/npc_gym_kid', c: 6, r: 5, dir: 'down',
+                  moved: { flag: 'gym2', c: 7, r: 6, dir: 'left' } });
+    m.npcs.push({ id: 'gym_leader', sheet: 'chars/npc_gym_leader', c: 6, r: 3, dir: 'down' });
   } else if (id === 'mill') {
     f('millstone', 3, 4, { id: 'mill_stone' });
     f('sacks', 0, 2); f('sacks', 1, 2); f('sacks', 7, 6, { id: 'mill_sacks' }); f('sacks', 8, 6);
@@ -214,17 +230,7 @@ function buildVillage() {
   blockTerrain(m, block);
 
   const object = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
-  // The building's door lines up with its room's door cell; walking into the door enters the room.
-  function building(name, room) {
-    const meta = SPRITE_META.buildings[name];
-    const [doorCol, bottomRow] = ROOMS[room].door;
-    const x = doorCol * TS + TS / 2 - meta.door, y = (bottomRow + 1) * TS - meta.h;
-    m.things.push({ img: 'buildings/' + name, x, y, w: meta.w, h: meta.h, sortY: (bottomRow + 1) * TS });
-    const c0 = Math.floor((x + meta.x0 + 4) / TS), c1 = Math.floor((x + meta.x1 - 5) / TS);
-    const r0 = Math.floor((y + meta.y0 + 16) / TS);
-    for (let r = r0; r <= bottomRow; r++) for (let c = c0; c <= c1; c++) block(c, r);
-    m.warps.set(cellKey(doorCol, bottomRow), { map: room, c: ROOMS[room].exit, r: ROOMS[room].h - 1, dir: 'up' });
-  }
+  const building = (name, room) => placeBuilding(B, name, room);
   building('lab_dome', 'lab');
   building('house_red', 'home');
   building('healing_center', 'heal');
@@ -265,6 +271,18 @@ function buildVillage() {
   return m;
 }
 
+// The building's door lines up with its room's door cell; walking into the door enters the room.
+function placeBuilding(B, name, room) {
+  const m = B.m, meta = SPRITE_META.buildings[name];
+  const [doorCol, bottomRow] = ROOMS[room].door;
+  const x = doorCol * TS + TS / 2 - meta.door, y = (bottomRow + 1) * TS - meta.h;
+  m.things.push({ img: 'buildings/' + name, x, y, w: meta.w, h: meta.h, sortY: (bottomRow + 1) * TS });
+  const c0 = Math.floor((x + meta.x0 + 4) / TS), c1 = Math.floor((x + meta.x1 - 5) / TS);
+  const r0 = Math.floor((y + meta.y0 + 16) / TS);
+  for (let r = r0; r <= bottomRow; r++) for (let c = c0; c <= c1; c++) B.block(c, r);
+  m.warps.set(cellKey(doorCol, bottomRow), { map: room, c: ROOMS[room].exit, r: ROOMS[room].h - 1, dir: 'up' });
+}
+
 // Water, river and raised ground cannot be walked on (bridges can).
 function blockTerrain(m, block) {
   for (let r = 0; r < m.h; r++) for (let c = 0; c < m.w; c++) {
@@ -291,7 +309,8 @@ function buildRoute1() {
   // It narrows to one tile to cross the river on a plank bridge.
   const road = union(rect(13, 0, 15, 9), rect(5, 7, 15, 9), rect(5, 7, 7, 11),
                      rect(5, 15, 7, 19), rect(5, 17, 21, 19), rect(19, 17, 21, 35));
-  put(stripLayout('path', road, cells(line(6, 12, 6, 14)), true, R1_W, R1_H));
+  // narrow paths: over the bridge, and from the lower road to the gym's door
+  put(stripLayout('path', road, cells([...line(6, 12, 6, 14), ...line(13, 26, 18, 26)]), true, R1_W, R1_H));
 
   // ---- the river runs right across the map and widens into a pond on the east side
   const pond = rect(20, 11, 25, 15);
@@ -305,11 +324,12 @@ function buildRoute1() {
   // ---- tall grass: gentler north of the river, tougher in the south
   const grass = [[rect(2, 3, 11, 5), 'route_a'], [rect(17, 3, 25, 8), 'route_a'],
                  [rect(9, 10, 18, 12), 'route_b'], [rect(9, 14, 17, 16), 'route_b'],
-                 [rect(2, 21, 17, 26), 'route_c'], [rect(2, 29, 17, 33), 'route_c'], [rect(23, 20, 25, 26), 'route_c']];
+                 [rect(2, 21, 8, 26), 'route_c'], [rect(2, 29, 17, 33), 'route_c'], [rect(23, 20, 25, 26), 'route_c']];
   for (const [set, area] of grass) {
     for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = 'tall_grass'; m.tall.set(k, area); }
   }
   blockTerrain(m, block);
+  placeBuilding(B, 'gym', 'gym');
 
   const object = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
   // forest on both sides (left open where the river passes), trees along the top, fence along the bottom
@@ -323,7 +343,7 @@ function buildRoute1() {
   for (let c = 2; c < 26; c++) if (c < 19 || c > 21) object('fence_h', c, 35);
 
   object('tree_apple', 3, 20); object('tree_round', 22, 19); object('tree_pine', 3, 12);
-  object('tree_orange', 12, 23); object('tree_pine', 15, 31); object('tree_round', 4, 31);
+  object('tree_orange', 17, 24); object('tree_pine', 15, 31); object('tree_round', 4, 31);
   object('bush', 16, 6); object('bush_berry', 3, 9); object('bush', 19, 9); object('bush', 18, 15);
   object('bush_berry', 22, 27); object('bush', 8, 20); object('bush', 24, 33);
   object('rocks', 12, 6); object('boulder', 24, 29); object('rocks', 3, 16); object('boulder', 17, 21); object('rocks', 22, 22);
@@ -332,6 +352,7 @@ function buildRoute1() {
   object('signpost', 8, 11, { id: 'sign_r1_bridge' });
   object('signpost', 13, 27, { id: 'sign_r1_spring' });
   object('signpost', 22, 34, { id: 'sign_r1_end' });
+  object('signpost', 12, 26, { id: 'sign_gym' });
   object('crate', 2, 8, { id: 'r1_crate_a' });
   object('crate', 25, 18, { id: 'r1_crate_b' });
   object('crate', 2, 34, { id: 'r1_crate_c' });
@@ -339,8 +360,10 @@ function buildRoute1() {
   m.things.sort((a, b) => a.sortY - b.sortY);
   m.npcs.push({ id: 'rival2', sheet: 'chars/npc_rival', c: 20, r: 31, dir: 'up' });
   m.exits.push({ side: 'up', c0: 13, c1: 15, to: { map: 'village', dc: 1, r: MAP_H - 1 } });
-  m.exits.push({ side: 'down', c0: 19, c1: 21, to: null,
-                 lockedText: 'ทางไปเมืองถัดไปยังไม่เปิดในเวอร์ชันนี้\nด่าน 3 จะตามมาในอนาคต' });
+  // the road south needs the gym's badge; stage 3 itself is not built yet (to: null)
+  m.exits.push({ side: 'down', c0: 19, c1: 21, to: null, need: 'badge1',
+                 lockedText: 'ด่านตรวจขวางทางอยู่: "ผู้ที่จะไปด่าน 3 ต้องมีเหรียญศิลา"\nไปท้าประลองที่ยิมศิลาทางตะวันตกของถนนก่อน',
+                 soonText: 'เหรียญศิลาส่องประกาย ด่านตรวจเปิดทางให้แล้ว!\nแต่ด่าน 3 ยังอยู่ระหว่างสร้าง จะตามมาในเวอร์ชันถัดไป' });
   return m;
 }
 

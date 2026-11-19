@@ -38,7 +38,10 @@ for kind in ("objects", "buildings", "furniture"):
             info["door"] = int(round((step[0] + step[-1] + 1) / 2))
         meta[kind][f[:-4]] = info
 
-for who in ("hero", "npc_researcher", "npc_rival", "npc_shopkeeper", "npc_healer"):
+for who in ("hero", "npc_researcher", "npc_rival", "npc_shopkeeper", "npc_healer",
+            "npc_gym_leader", "npc_gym_hiker", "npc_gym_kid"):
+    if not os.path.isdir(os.path.join(SRC, "sprites", who)):
+        continue
     copy(os.path.join("sprites", who, f"{who}_walk_32x48.png"), os.path.join("chars", f"{who}.png"))
 copy(r"sprites\npc_large\npc_rival.png", r"chars\rival_large.png")
 for f in sorted(os.listdir(os.path.join(SRC, "sprites", "monsters"))):

@@ -554,6 +554,13 @@ if os.path.exists(os.path.join(SRC, "tileset_buildings.png")):
     for b, name in zip(boxes, BLD):
         tw, th = round((b[2] - b[0]) * s), round((b[3] - b[1]) * s)
         buildings[name] = on_canvas(reduce_palette(resample(a, b, tw, th), 40), T, T)
+    # the gym was drawn on its own sheet: one building, made six tiles wide
+    if os.path.exists(os.path.join(SRC, "tileset_gym.png")):
+        g = despeckle(load("tileset_gym.png"))
+        gb = piece_grid(g, 1, 1)[0]
+        gs = 192 / (gb[2] - gb[0])
+        buildings["gym"] = on_canvas(reduce_palette(
+            resample(g, gb, 192, round((gb[3] - gb[1]) * gs)), 40), T, T)
     bld_sheet = pack(buildings, "buildings", "tileset_buildings")
     print("buildings:", len(buildings), f"{1 / s:.2f} source px per pixel")
 
