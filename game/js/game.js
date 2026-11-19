@@ -19,13 +19,21 @@
   function resize() {
     const dpr = window.devicePixelRatio || 1;
     const hint = document.getElementById('hint');
-    const availH = window.innerHeight - (hint ? hint.offsetHeight + 12 : 0);
-    S = Math.max(1, Math.floor(Math.min(window.innerWidth * dpr / VW, availH * dpr / VH)));
-    canvas.width = VW * S; canvas.height = VH * S;
-    canvas.style.width = (VW * S / dpr) + 'px';
-    canvas.style.height = (VH * S / dpr) + 'px';
+    const touch = document.body.classList.contains('touch');
+    const portrait = window.innerHeight > window.innerWidth;
+    let availH = window.innerHeight;
+    if (touch && portrait) availH -= 210;                    // room for the on-screen buttons below
+    else if (hint && hint.offsetHeight) availH -= hint.offsetHeight + 12;
+    const fit = Math.min(window.innerWidth * dpr / VW, availH * dpr / VH);
+    // Whole-number scaling keeps every pixel the same size. On sharp (high-dpi) screens the
+    // pixels are too small for that to matter, so fill the space instead.
+    S = dpr >= 2 && fit >= 1.5 ? fit : Math.max(1, Math.floor(fit));
+    canvas.width = Math.round(VW * S); canvas.height = Math.round(VH * S);
+    canvas.style.width = (canvas.width / dpr) + 'px';
+    canvas.style.height = (canvas.height / dpr) + 'px';
   }
   window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 200));
 
   // ------------------------------------------------------------------ images
   const IMG = {};
@@ -58,7 +66,7 @@
   let busy = false;            // a scripted scene (dialogue, battle) is running
   let bt = null;               // current battle
   const ui = { msg: null, menu: null, fade: 0, flash: 0, portrait: null, prompt: null };
-  const held = [];             // directions currently held, most recent last
+  const held = [];             // directions currently held: {src, dir}, most recent last
   const tweens = [];
   let clock = 0;
 
@@ -169,20 +177,144 @@
     w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right',
     z: 'ok', Z: 'ok', Enter: 'ok', ' ': 'ok', x: 'back', X: 'back', Escape: 'back', Backspace: 'back',
   };
+  // Three ways to play: keyboard, on-screen touch buttons, gamepad. Each one holds
+  // directions under its own name so releasing one never cancels another.
+  function holdDir(src, dir, on) {
+    const i = held.findIndex((h) => h.src === src && h.dir === dir);
+    if (on && i < 0) held.push({ src, dir });
+    if (!on && i >= 0) held.splice(i, 1);
+  }
+  const heldDir = () => (held.length ? held[held.length - 1].dir : null);
+
+  const HINTS = {
+    keys: '<b>ลูกศร / WASD</b> เดิน &nbsp;·&nbsp; <b>Z / Enter / Space</b> ตกลง คุย สำรวจ &nbsp;·&nbsp; <b>X / Esc</b> เมนูทีม ยกเลิก',
+    pad: '<b>ปุ่มทิศทาง / ก้านซ้าย</b> เดิน &nbsp;·&nbsp; <b>A</b> ตกลง คุย สำรวจ &nbsp;·&nbsp; <b>B / X / Y / Start</b> เมนูทีม ยกเลิก',
+    touch: '',
+  };
+  let inputMode = '';
+  function setInputMode(m) {           // show the help line and buttons that fit how the player is playing
+    if (m === inputMode) return;
+    inputMode = m;
+    document.body.classList.toggle('touch', m === 'touch');
+    const hint = document.getElementById('hint');
+    if (hint) hint.innerHTML = HINTS[m];
+    resize();
+  }
+
   window.addEventListener('keydown', (ev) => {
     const k = KEYMAP[ev.key];
     if (!k) return;
     ev.preventDefault();
-    if (DIRS[k] && !held.includes(k)) held.push(k);
+    setInputMode('keys');
+    if (DIRS[k]) holdDir('key', k, true);
     if (ev.repeat && !DIRS[k]) return;
     press(k, ev.repeat);
   });
   window.addEventListener('keyup', (ev) => {
     const k = KEYMAP[ev.key];
-    const i = held.indexOf(k);
-    if (i >= 0) held.splice(i, 1);
+    if (k) holdDir('key', k, false);
   });
-  window.addEventListener('blur', () => { held.length = 0; });
+  window.addEventListener('blur', () => { held.length = 0; pad.dir = null; stick.dir = null; });
+
+  // A direction held on the touch pad or a gamepad. Unlike a keyboard these do not
+  // repeat by themselves, so menus get their own repeat while the direction is held.
+  const pad = { dir: null, t: 0 }, stick = { dir: null, t: 0 };
+  function setVirtualDir(src, state, dir) {
+    if (state.dir === dir) return;
+    if (state.dir) holdDir(src, state.dir, false);
+    state.dir = dir; state.t = 0;
+    if (dir) { holdDir(src, dir, true); press(dir, false); }
+  }
+  function updateVirtual(dt) {
+    for (const state of [pad, stick]) {
+      if (!state.dir) continue;
+      state.t += dt;
+      if (state.t > 0.36) { state.t -= 0.13; press(state.dir, true); }
+    }
+  }
+
+  // ---- gamepad (standard layout: Xbox-style pads, handheld PCs such as the Legion Go S)
+  let padButtons = { ok: false, back: false };
+  function pollGamepad() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    let gp = null;
+    for (const p of pads) if (p && p.connected) { gp = p; break; }
+    if (!gp) { setVirtualDir('stick', stick, null); return; }
+    const down = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
+    const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
+    let dir = null;
+    if (down(12)) dir = 'up'; else if (down(13)) dir = 'down';
+    else if (down(14)) dir = 'left'; else if (down(15)) dir = 'right';
+    else if (Math.abs(ax) > 0.5 || Math.abs(ay) > 0.5) {
+      dir = Math.abs(ax) > Math.abs(ay) ? (ax < 0 ? 'left' : 'right') : (ay < 0 ? 'up' : 'down');
+    }
+    const now = { ok: down(0), back: down(1) || down(2) || down(3) || down(9) };
+    if (dir || now.ok || now.back) setInputMode('pad');
+    setVirtualDir('stick', stick, dir);
+    if (now.ok && !padButtons.ok) press('ok', false);
+    if (now.back && !padButtons.back) press('back', false);
+    padButtons = now;
+  }
+
+  // ---- touch: on-screen direction pad and buttons, and tapping the picture itself
+  function setupTouch() {
+    const dpad = document.getElementById('dpad');
+    const dirAt = (ev) => {
+      const r = dpad.getBoundingClientRect();
+      const dx = ev.clientX - (r.left + r.width / 2), dy = ev.clientY - (r.top + r.height / 2);
+      if (Math.hypot(dx, dy) < r.width * 0.12) return null;          // dead centre
+      return Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'up' : 'down');
+    };
+    const show = (dir) => { dpad.dataset.dir = dir || ''; };
+    let finger = null;
+    dpad.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      finger = ev.pointerId;
+      try { dpad.setPointerCapture(ev.pointerId); } catch (e) { /* not capturable */ }
+      const d = dirAt(ev); show(d); setVirtualDir('pad', pad, d);
+    });
+    dpad.addEventListener('pointermove', (ev) => {
+      if (ev.pointerId !== finger) return;
+      const d = dirAt(ev); show(d); setVirtualDir('pad', pad, d);
+    });
+    const lift = (ev) => { if (ev.pointerId === finger) { finger = null; show(null); setVirtualDir('pad', pad, null); } };
+    dpad.addEventListener('pointerup', lift);
+    dpad.addEventListener('pointercancel', lift);
+
+    for (const [id, key] of [['btnA', 'ok'], ['btnB', 'back']]) {
+      const el = document.getElementById(id);
+      el.addEventListener('pointerdown', (ev) => { ev.preventDefault(); el.classList.add('down'); press(key, false); });
+      for (const t of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(t, () => el.classList.remove('down'));
+    }
+    document.getElementById('btnFull').addEventListener('click', () => {
+      const d = document;
+      if (d.fullscreenElement) { d.exitFullscreen(); return; }
+      const go = d.documentElement.requestFullscreen && d.documentElement.requestFullscreen();
+      if (go && go.then) go.then(() => { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); }).catch(() => {});
+    });
+
+    // Tapping the picture: choose the menu item under the finger, otherwise act as the confirm button.
+    canvas.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      const r = canvas.getBoundingClientRect();
+      const x = (ev.clientX - r.left) / r.width * VW, y = (ev.clientY - r.top) / r.height * VH;
+      const m = ui.menu;
+      if (!m) { press('ok', false); return; }
+      const cellW = (m.w - 16) / m.cols;
+      const col = Math.floor((x - m.x - 8) / cellW), row = Math.floor((y - m.y - 7 - m.titleH) / m.rowH);
+      const i = row * m.cols + col;
+      const inside = x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h;
+      if (inside && col >= 0 && col < m.cols && row >= 0 && i < m.opts.length) {
+        if (i !== m.index) { m.index = i; if (m.onMove) m.onMove(i); }
+        press('ok', false);
+      } else if (!inside && m.cancellable) press('back', false);
+    });
+    // any finger on the screen brings the touch buttons up
+    window.addEventListener('pointerdown', (ev) => { if (ev.pointerType === 'touch') setInputMode('touch'); }, true);
+    document.addEventListener('contextmenu', (ev) => ev.preventDefault());
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    setInputMode(coarse ? 'touch' : 'keys');
+  }
 
   function press(k, repeat) {
     if (ui.menu) {
@@ -287,7 +419,7 @@
       }
     }
     if (pl.moving || busy) return;
-    const d = held[held.length - 1];
+    const d = heldDir();
     if (!d) { pl.walk = 0; pl.turn = 0; return; }
     if (pl.dir !== d) { pl.dir = d; pl.turn = arrived ? 0 : 0.09; }
     if (pl.turn > 0) { pl.turn -= dt; return; }
@@ -864,11 +996,13 @@
       if (tw.t >= 1) { tweens.splice(i, 1); tw.resolve(); }
     }
     if (ui.msg) ui.msg.shown += dt * 48;
+    updateVirtual(dt);
     if (mode === 'world') updateWorld(dt);
   }
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000 || 0);
     last = now;
+    pollGamepad();
     tick(dt);
     render();
     requestAnimationFrame(frame);
@@ -902,6 +1036,7 @@
   }
 
   async function boot() {
+    setupTouch();
     resize();
     requestAnimationFrame(frame);
     MAPS = buildMaps();
@@ -910,6 +1045,8 @@
     await title();
   }
   window.addEventListener('beforeunload', () => { if (mode === 'world' && !busy) save(); });
+  // phones often close a page without "beforeunload", so also save when it goes to the background
+  document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'world' && !busy) save(); });
 
   // for testing from the browser console
   window.GAME = {
@@ -917,7 +1054,8 @@
       menu: ui.menu ? { index: ui.menu.index, opts: ui.menu.opts.map((o) => o.label) } : null, prompt: ui.prompt }; },
     press, map: () => MAP, maps: () => MAPS,
     warp(c, r, mapId) { if (mapId) setMap(mapId); pl.c = c; pl.r = r; pl.moving = false; },
-    hold(dir, on) { const i = held.indexOf(dir); if (on && i < 0) held.push(dir); if (!on && i >= 0) held.splice(i, 1); },
+    hold(dir, on) { holdDir('test', dir, on); },
+    pollPad: pollGamepad, inputMode: () => inputMode,
     // run the game for a number of seconds without waiting for the screen to refresh
     async advance(seconds) {
       const turn = () => new Promise((r) => { const ch = new MessageChannel(); ch.port1.onmessage = () => r(); ch.port2.postMessage(0); });

@@ -30,14 +30,14 @@ def spans(mask_1d, min_gap, min_len=12):
     return [s for s in out if s[1] - s[0] >= min_len]
 
 
-def find_sprites(a, row_gap=None):
+def find_sprites(a, row_gap=None, col_gap=25):
     """Bounding boxes (x0, y0, x1, y1), grouped by row."""
     alpha = a[..., 3] > 0
     rows = spans(alpha.any(axis=1), row_gap) if row_gap else [(0, a.shape[0])]
     out = []
     for r0, r1 in rows:
         row = []
-        for c0, c1 in spans(alpha[r0:r1].any(axis=0), 25):
+        for c0, c1 in spans(alpha[r0:r1].any(axis=0), col_gap):
             ys = np.flatnonzero(alpha[r0:r1, c0:c1].any(axis=1))
             row.append((c0, r0 + ys[0], c1, r0 + ys[-1] + 1))
         out.append(row)
@@ -190,7 +190,10 @@ HEIGHTS = {}  # sprite name -> (height in pixels, gap below it)
 def lineup(src, names, cell_w, cell_h, folder, sheet_name, colors, match=None):
     """match: names of already-sliced sprites whose height each sprite should copy."""
     a = load(src)
-    boxes = find_sprites(a)[0]
+    for col_gap in (25, 16, 10, 6):      # sprites drawn close together need a smaller gap
+        boxes = find_sprites(a, col_gap=col_gap)[0]
+        if len(boxes) == len(names):
+            break
     assert len(boxes) == len(names), (src, len(boxes))
     max_w = max(b[2] - b[0] for b in boxes)
     max_h = max(b[3] - b[1] for b in boxes)
@@ -243,10 +246,25 @@ for src, names, sheet_name in [
 # ------------------------------------------------------------------ preview
 Z = 6
 # each character's 4x4 walk sheet becomes one strip of four directions side by side
+# Second set of monsters: two sheets of five, each with an optional back-view sheet.
+new_strips = []
+for src, names in [
+        ("monsters_new_a", ["wild_fire_frog", "wild_water_crab", "wild_water_duck",
+                            "wild_leaf_durian", "wild_leaf_bat"]),
+        ("monsters_new_b", ["wild_electric_gecko", "wild_rock_snail", "wild_ghost_kite",
+                            "wild_normal_rooster", "wild_normal_buffalo"])]:
+    if not os.path.exists(os.path.join(SRC, src + ".png")):
+        continue
+    new_strips.append(lineup(src + ".png", names, 64, 64, "monsters", src[9:] + "_64x64.png", 24))
+    if os.path.exists(os.path.join(SRC, src + "_back.png")):
+        new_strips.append(lineup(src + "_back.png", [n + "_back" for n in names], 64, 64, "monsters",
+                                 src[9:] + "_back_64x64.png", 24, match=names))
+
 walk_strips = [np.hstack([s[i * H:(i + 1) * H] for i in range(4)]) for s in [sheet] + npc_walks]
 strips = walk_strips + [npc_large, np.hstack([starters, wild])]
 if len(backs) == 2:
     strips.append(np.hstack(backs))
+strips += new_strips
 pw = max(s.shape[1] for s in strips) * Z + 2 * 24
 ph = sum(s.shape[0] * Z + 24 for s in strips) + 24
 yy, xx = np.mgrid[0:ph, 0:pw]
