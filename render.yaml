@@ -17,6 +17,7 @@ services:
     runtime: node
     rootDir: server
     plan: free
+    region: singapore          # closest to players in Thailand
     buildCommand: npm install
     startCommand: node index.js
     healthCheckPath: /health
@@ -31,3 +32,4 @@ services:
 databases:
   - name: pro-monter-db
     plan: free
+    region: singapore          # same region as the API, so they talk over Render's private network
