@@ -212,8 +212,43 @@
   }
 
   // A message in the text box. Resolves when the player presses the confirm key.
+  // ---- typing a line of text (the hero's name): an HTML box over the game, so phone
+  // keyboards work. Resolves with the text, or null when cancelled.
+  let textOpen = false;
+  function askText(title, value, maxLen) {
+    const box = document.getElementById('nameBox'), input = document.getElementById('nameInput');
+    const ok = document.getElementById('nameOk'), cancel = document.getElementById('nameCancel');
+    document.getElementById('nameTitle').textContent = title;
+    input.maxLength = maxLen; input.value = value || '';
+    box.hidden = false; textOpen = true;
+    setTimeout(() => { input.focus(); input.select(); }, 30);
+    return new Promise((resolve) => {
+      const done = (v) => {
+        box.hidden = true; textOpen = false; input.blur();
+        ok.onclick = cancel.onclick = null; box.onkeydown = null;
+        resolve(v);
+      };
+      ok.onclick = () => done(input.value.replace(/\s+/g, ' ').trim().slice(0, maxLen));
+      cancel.onclick = () => done(null);
+      box.onkeydown = (ev) => {
+        ev.stopPropagation();
+        if (ev.key === 'Enter') ok.onclick();
+        if (ev.key === 'Escape') done(null);
+      };
+    });
+  }
+  const DEFAULT_NAME = 'ต้นกล้า';
+  async function askHeroName(first) {
+    const v = await askText(first ? 'ชื่อของคุณคืออะไร?' : 'เปลี่ยนชื่อตัวละคร', G.name || '', 12);
+    if (v === null && !first) return false;
+    G.name = v || G.name || DEFAULT_NAME;
+    save();
+    return true;
+  }
+
   function say(text) {
     return new Promise((resolve) => {
+      text = String(text).split('{ชื่อ}').join((G && G.name) || DEFAULT_NAME);
       const lines = wrap(text, 436, 13).map(graphemes);
       const pages = [];
       for (let i = 0; i < lines.length; i += 3) pages.push(lines.slice(i, i + 3));
@@ -277,7 +312,7 @@
     resize();
   }
 
-  const typing = (ev) => ONLINE.formOpen || (ev.target && /^(INPUT|TEXTAREA)$/.test(ev.target.tagName));
+  const typing = (ev) => ONLINE.formOpen || textOpen || (ev.target && /^(INPUT|TEXTAREA)$/.test(ev.target.tagName));
   window.addEventListener('keydown', (ev) => {
     if (typing(ev)) return;
     const k = KEYMAP[ev.key];
@@ -317,7 +352,7 @@
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     let gp = null;
     for (const p of pads) if (p && p.connected) { gp = p; break; }
-    if (!gp || ONLINE.formOpen) { setVirtualDir('stick', stick, null); return; }
+    if (!gp || ONLINE.formOpen || textOpen) { setVirtualDir('stick', stick, null); return; }
     const down = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
     const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
     let dir = null;
@@ -581,7 +616,7 @@
   const SCENES = {
     async researcher() {
       if (!G.flags.starter) {
-        await say('ยินดีต้อนรับสู่หมู่บ้านต้นกล้า!\nฉันคือศาสตราจารย์สน ศึกษามอนสเตอร์อยู่ที่ศูนย์วิจัยโดมกระจกหลังนี้');
+        await say('ยินดีต้อนรับ {ชื่อ}! มาตรงเวลาเลยนะ\nฉันคือศาสตราจารย์สน ศึกษามอนสเตอร์อยู่ที่ศูนย์วิจัยโดมกระจกหลังนี้');
         await say('ออกไปนอกหมู่บ้านโดยไม่มีคู่หูนั้นอันตราย\nเลือกมอนสเตอร์ไปเป็นคู่หูหนึ่งตัวสิ');
         let pick = -1;
         while (pick < 0) {
@@ -626,7 +661,7 @@
     },
 
     async healer() {
-      await say('ศูนย์รักษายินดีต้อนรับ ให้ฉันดูแลมอนสเตอร์ของเธอนะ');
+      await say('ศูนย์รักษายินดีต้อนรับค่ะ คุณ{ชื่อ}\nให้ฉันดูแลมอนสเตอร์ของคุณนะคะ');
       if (!G.party.length) { await say('อ้าว เธอยังไม่มีมอนสเตอร์นี่นา ไปหาศาสตราจารย์สนก่อนสิ'); return; }
       await fadeTo(0.6, 250); healParty(); AUDIO.sfx('heal'); await wait(350); await fadeTo(0, 250);
       G.healSpot = { map: MAP.id, c: HEAL_SPOT.c, r: HEAL_SPOT.r, dir: 'up' };   // wake up here after a loss
@@ -641,7 +676,7 @@
       if (!G.flags.starter) { await say('นายยังไม่มีมอนสเตอร์เหรอ?\nไปหาศาสตราจารย์สนที่ลานกลางหมู่บ้านก่อนสิ'); return; }
       if (G.flags.rivalBeaten) { await say('ครั้งหน้าฉันไม่แพ้แน่! เจอกันที่เส้นทางที่ 1'); return; }
       if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปศูนย์รักษาก่อนเถอะ'); return; }
-      await say('ฉันชื่อพายุ! ได้มอนสเตอร์มาจากศาสตราจารย์เหมือนกัน\nมาประลองกันหน่อย!');
+      await say('นายคือ{ชื่อ}ใช่ไหม? ฉันชื่อพายุ!\nได้มอนสเตอร์มาจากศาสตราจารย์เหมือนกัน มาประลองกันหน่อย!');
       const result = await battle([makeMon(RIVAL_PICK[G.flags.starter], 5)], { name: 'พายุ', img: 'chars/rival_large' });
       if (result === 'win') {
         G.flags.rivalBeaten = true;
@@ -660,7 +695,7 @@
     async rival2() {
       if (G.flags.stage2) { await say(G.flags.badge1 ? 'ได้เหรียญศิลามาแล้วเหรอ! สมกับที่ชนะฉันได้\nไว้เจอกันที่ด่าน 3 นะ' : 'นายเก่งขึ้นทุกวันเลย... ไปท้ายิมศิลาให้ได้เหรียญมาสิ\nยิมอยู่ทางตะวันตกของถนนนี่เอง'); return; }
       if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปดื่มน้ำพุฟื้นพลังก่อนเถอะ'); return; }
-      await say('มาถึงจนได้! ฉันฝึกที่นี่จนมอนสเตอร์วิวัฒนาการแล้วนะ\nคราวนี้ฉันมีสองตัว รับมือให้ได้ล่ะ!');
+      await say('มาถึงจนได้นะ {ชื่อ}! ฉันฝึกที่นี่จนเก่งขึ้นเยอะแล้ว\nคราวนี้ฉันมีสองตัว รับมือให้ได้ล่ะ!');
       const team = RIVAL_REMATCH.map(([sp, lv]) => makeMon(sp === 'starter2' ? RIVAL_PICK[G.flags.starter] + '2' : sp, lv));
       const result = await battle(team, { name: 'พายุ', img: 'chars/rival_large' });
       if (result === 'win') {
@@ -691,7 +726,7 @@
       G.flags[g.flag] = true;
       G.bag.potion += 3;
       G.flags.stones1 = true; G.bag.stone_rock += GYM_STONES;
-      await say('ยอดเยี่ยม! เธอแข็งแกร่งจริง ๆ\nรับเหรียญศิลานี้ไป เป็นหลักฐานว่าเธอชนะยิมแห่งนี้');
+      await say('ยอดเยี่ยม {ชื่อ}! เธอแข็งแกร่งจริง ๆ\nรับเหรียญศิลานี้ไป เป็นหลักฐานว่าเธอชนะยิมแห่งนี้');
       await say('ได้รับเหรียญศิลา ยา 3 ขวด และหินวิวัฒน์ศิลา ' + GYM_STONES + ' ก้อน!');
       await say('หินวิวัฒน์ศิลาช่วยให้มอนสเตอร์หายากวิวัฒนาการได้\nเมื่อถึงเลเวล มันจะวิวัฒนาการหลังชนะการต่อสู้ครั้งถัดไป');
       await say('ยินดีด้วย! คุณผ่านด่าน 2 แล้ว\nด่านตรวจทางใต้ของเส้นทางที่ 1 จะเปิดทางไปด่าน 3 ให้');
@@ -747,7 +782,7 @@
       G.flags[g.flag] = true;
       G.bag.potion_plus += 3;
       G.flags.stones2 = true; G.bag.stone_water += GYM_STONES;
-      await say('สุดยอดเลย! เธอไหลไปกับกระแสได้อย่างงดงาม\nรับเหรียญวารีนี้ไป เป็นหลักฐานว่าเธอชนะยิมแห่งนี้');
+      await say('สุดยอดเลย {ชื่อ}! เธอไหลไปกับกระแสได้อย่างงดงาม\nรับเหรียญวารีนี้ไป เป็นหลักฐานว่าเธอชนะยิมแห่งนี้');
       await say('ได้รับเหรียญวารี ยาชั้นดี 3 ขวด และหินวิวัฒน์วารี ' + GYM_STONES + ' ก้อน!');
       await say('ยินดีด้วย! คุณผ่านด่าน 4 แล้ว\nทางใต้ของตลาดคือด่าน 5 ซากเมืองโบราณ');
       save();
@@ -779,7 +814,7 @@
     async rival4() {
       if (G.flags.stage5) { await say('ทางไปด่าน 6 อยู่หลังประตูเมืองเก่านี่แหละ\nแต่ได้ยินว่ายังไปไม่ได้ ไว้รอดูกันนะ!'); return; }
       if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปดื่มน้ำพุในลานเมืองก่อนเถอะ'); return; }
-      await say('มาถึงซากเมืองโบราณจนได้! ตั้งแต่แพ้นายครั้งก่อน\nฉันฝึกหนักมาตลอดทางเลยนะ');
+      await say('มาถึงซากเมืองโบราณจนได้นะ {ชื่อ}! ตั้งแต่แพ้นายครั้งก่อน\nฉันฝึกหนักมาตลอดทางเลยนะ');
       await say('ทีมฉันตอนนี้มีสี่ตัวแล้ว คราวนี้ไม่ยอมแพ้ง่าย ๆ แน่!');
       const team = RIVAL_RUINS.map(([sp, lv]) => makeMon(sp === 'starter3' ? RIVAL_PICK[G.flags.starter] + '3' : sp, lv));
       const result = await battle(team, { name: 'พายุ', img: 'chars/rival_large' });
@@ -818,7 +853,7 @@
     async rival3() {
       if (G.flags.stage3) { await say('ตลาดน้ำบางบัวอยู่ข้างหน้าแล้ว ที่นั่นมียิมวารีด้วยนะ\nไปท้าประลองให้ได้เหรียญมาอีกเหรียญสิ!'); return; }
       if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปดื่มน้ำพุฟื้นพลังก่อนเถอะ'); return; }
-      await say('ในที่สุดก็มาถึง! ฉันรอนายอยู่ตรงนี้นานแล้ว\nคู่หูของฉันวิวัฒนาการจนถึงร่างสุดท้ายแล้วนะ');
+      await say('ในที่สุดก็มาถึง {ชื่อ}! ฉันรอนายอยู่ตรงนี้นานแล้ว\nคู่หูของฉันวิวัฒนาการจนถึงร่างสุดท้ายแล้วนะ');
       await say('นี่คือการประลองครั้งสุดท้ายของด่านนี้ ทุ่มให้สุดตัวเลย!');
       const team = RIVAL_FINAL.map(([sp, lv]) => makeMon(sp === 'starter3' ? RIVAL_PICK[G.flags.starter] + '3' : sp, lv));
       const result = await battle(team, { name: 'พายุ', img: 'chars/rival_large' });
@@ -1128,19 +1163,22 @@
     for (;;) {
       const opts = G.party.map((m) => ({
         label: nm(m) + ' ' + rarityOf(m.sp).stars + '  Lv.' + m.level, badge: SPECIES[m.sp].type, hp: [m.hp, stats(m).hp] }));
-      opts.push({ label: 'ดูตารางแพ้ธาตุ' }, { label: ONLINE.loggedIn ? 'ออนไลน์ / อันดับ (' + ONLINE.username + ')' : 'ออนไลน์ / อันดับ' });
+      opts.push({ label: 'เมนูอื่น ๆ', sub: 'ตารางแพ้ธาตุ · ออนไลน์ / อันดับ · เปลี่ยนชื่อ' });
       const i = await choose(opts, {
         x: 50, y: 24, w: 380, rowH: 30, cancellable: true, start: at,
-        title: G.party.length ? 'ทีมมอนสเตอร์  (เลือกเพื่อดูข้อมูล)' : 'ยังไม่มีมอนสเตอร์ในทีม',
+        title: G.party.length ? 'ทีมของ' + (G.name || DEFAULT_NAME) + '  (เลือกเพื่อดูข้อมูล)' : 'ยังไม่มีมอนสเตอร์ในทีม',
         footer: 'ทอง ' + G.gold + '   แคปซูล ' + itemCount('ball') + '   ยา ' + itemCount('heal')
           + '   จับได้ ' + goalCaught().length + '/6   เหรียญตรา ' + ((G.flags.badge1 ? 1 : 0) + (G.flags.badge2 ? 1 : 0)) });
       if (i < 0) break;
       at = i;
-      if (i === G.party.length) {          // the type table
-        ui.chart = true; await anyKey(); ui.chart = false;
+      if (i === G.party.length) {          // more: the type table, online, renaming
+        const k = await choose(['ดูตารางแพ้ธาตุ', ONLINE.loggedIn ? 'ออนไลน์ / อันดับ (' + ONLINE.username + ')' : 'ออนไลน์ / อันดับ',
+          'เปลี่ยนชื่อตัวละคร', 'กลับ'], { x: 130, y: 90, w: 220, rowH: 26, cancellable: true, title: 'เมนูอื่น ๆ' });
+        if (k === 0) { ui.chart = true; await anyKey(); ui.chart = false; }
+        else if (k === 1) await onlineMenu(false);
+        else if (k === 2 && (await askHeroName(false))) await say('เปลี่ยนชื่อเป็น {ชื่อ} แล้ว');
         continue;
       }
-      if (i === G.party.length + 1) { await onlineMenu(false); continue; }
       const m = G.party[i];
       ui.card = m;                         // the monster's information card
       const pick = await choose(['ตั้งเป็นตัวนำ', 'กลับ'], { x: 212, y: 262, w: 220, cols: 2, rowH: 24, cancellable: true });
@@ -1232,7 +1270,7 @@
       noteSeen();
     }
     tween(260, (t) => { bt.spr.me.dx = -220 * (1 - t); });
-    await say('ลุยเลย ' + nm(bt.me) + '!');
+    await say('{ชื่อ} : ลุยเลย ' + nm(bt.me) + '!');
 
     // ---- cooldowns
     // The first time a monster is looked at in this battle (when it comes out), its moves get
@@ -1532,7 +1570,7 @@
         bt.me = next; bt.hp.me = next.hp;
         bt.spr.me = { dx: -220, dy: 0, alpha: 1, blink: false };
         await tween(260, (t) => { bt.spr.me.dx = -220 * (1 - t); });
-        await say('ลุยเลย ' + nm(next) + '!');
+        await say('{ชื่อ} : ลุยเลย ' + nm(next) + '!');
         await foeTurn();                  // switching takes the turn: the foe attacks the newcomer
       } else if (what === 'ball') {
         if (trainer) { await say('ใช้แคปซูลกับมอนสเตอร์ที่มีเจ้าของแล้วไม่ได้!'); continue; }
@@ -2045,8 +2083,16 @@
     if (!G.flags.intro) {
       G.flags.intro = true;
       await run(async () => {
-        await say('เช้าวันใหม่ที่หมู่บ้านต้นกล้า\nวันนี้ศาสตราจารย์สนนัดให้ไปพบที่ลานกลางหมู่บ้าน');
+        await say('เช้าวันใหม่ที่หมู่บ้านต้นกล้า\nก่อนออกเดินทาง ขอทราบชื่อของคุณหน่อย');
+        await askHeroName(true);
+        await say('ยินดีที่ได้รู้จัก {ชื่อ}!\nวันนี้ศาสตราจารย์สนนัดให้ไปพบที่ลานกลางหมู่บ้าน');
         await say('เดินตามทางดินไปทางขวา แล้วคุยกับศาสตราจารย์ด้วยปุ่ม Z');
+      });
+    } else if (!G.name) {
+      await run(async () => {
+        await say('ระบบใหม่! ตอนนี้ตั้งชื่อตัวละครได้แล้ว\nตั้งชื่อให้ตัวละครของคุณหน่อย');
+        await askHeroName(true);
+        await say('เรียบร้อย! ต่อไปนี้ทุกคนจะเรียกคุณว่า {ชื่อ}');
       });
     }
   }
