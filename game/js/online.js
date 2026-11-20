@@ -8,7 +8,7 @@ const ONLINE = (() => {
   // service from render.yaml. "?api=https://..." in the page address overrides it.
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const API_URL = new URLSearchParams(location.search).get('api')
-    || (LOCAL ? 'http://localhost:3000' : 'https://monster-tonkla-api.onrender.com');
+    || (LOCAL ? 'http://localhost:3000' : 'https://pro-monter-api.onrender.com');
   const KEY = 'sprout_online' + (location.search.includes('test') ? '_test' : '');
 
   // { token, username, linked }  linked = this device's save is the account's save, so it may

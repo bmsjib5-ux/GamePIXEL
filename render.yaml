@@ -3,7 +3,7 @@
 # server's address into game/js/online.js (API_URL) if Render gave it a different name.
 services:
   - type: web
-    name: monster-tonkla
+    name: pro-monter
     runtime: static
     buildCommand: ""
     staticPublishPath: ./game
@@ -13,7 +13,7 @@ services:
         value: no-cache
 
   - type: web
-    name: monster-tonkla-api
+    name: pro-monter-api
     runtime: node
     rootDir: server
     plan: free
@@ -23,11 +23,11 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: monster-tonkla-db
+          name: pro-monter-db
           property: connectionString
       - key: ALLOWED_ORIGINS
         value: "*"
 
 databases:
-  - name: monster-tonkla-db
+  - name: pro-monter-db
     plan: free
