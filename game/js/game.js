@@ -1687,9 +1687,14 @@
 
   async function boot() {
     setupTouch();
+    // The auto-play bot is for testing only: its button and the P key exist only when the
+    // page is opened with ?bot in the address (e.g. index.html?bot or index.html?test&bot).
     const botBtn = document.getElementById('btnBot');
-    if (botBtn) botBtn.addEventListener('click', (ev) => { ev.preventDefault(); cycleBot(); botBtn.blur(); });
-    window.addEventListener('keydown', (ev) => { if ((ev.key === 'p' || ev.key === 'P') && !ev.repeat) cycleBot(); });
+    if (/[?&]bot(&|=|$)/.test(location.search)) {
+      botBtn.hidden = false;
+      botBtn.addEventListener('click', (ev) => { ev.preventDefault(); cycleBot(); botBtn.blur(); });
+      window.addEventListener('keydown', (ev) => { if ((ev.key === 'p' || ev.key === 'P') && !ev.repeat) cycleBot(); });
+    }
     resize();
     requestAnimationFrame(frame);
     MAPS = buildMaps();
