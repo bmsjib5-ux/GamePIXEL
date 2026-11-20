@@ -961,6 +961,7 @@
       spr: { me: { dx: -220, dy: 0, alpha: 1, blink: false }, foe: { dx: 220, dy: 0, alpha: 1, blink: false } },
       trainerX: trainer ? 0 : null, capsule: null, showMe: true, showFoe: !trainer,
       fx: null, evo: null, evolving: [], pop: null,
+      round: 0, ready: new Map(),       // turn counter; monster -> { move id: turn it is ready again }
     };
     if (opts.legend) { bt.spr.foe.dx = 0; bt.spr.foe.dy = -240; }      // it descends from the sky
     mode = 'battle';
@@ -983,12 +984,42 @@
       await say(nm(bt.foe) + 'ป่าปรากฏตัว!');
       noteSeen();
     }
+    // with two or more monsters able to fight, the player picks who goes out first
+    if (G.party.filter((m) => m.hp > 0).length > 1) {
+      const pick = await pickMon('จะส่งตัวไหนออกไปสู้?', false);
+      bt.me = pick; bt.hp.me = pick.hp;
+    }
     tween(260, (t) => { bt.spr.me.dx = -220 * (1 - t); });
     await say('ลุยเลย ' + nm(bt.me) + '!');
+
+    // ---- cooldowns
+    const cdLeft = (m, id) => Math.max(0, ((bt.ready.get(m) || {})[id] || 0) - bt.round);
+    function startCooldown(m, id) {
+      const c = moveCooldown(id);
+      if (!c) return;
+      if (!bt.ready.has(m)) bt.ready.set(m, {});
+      bt.ready.get(m)[id] = bt.round + c + 1;
+    }
+    // the foe picks at random among its moves that are ready
+    function foeMove() {
+      const ok = bt.foe.moves.filter((id) => cdLeft(bt.foe, id) === 0);
+      return ok.length ? ok[rand(ok.length)] : 'tackle';
+    }
+    // The party list, to send a monster out. Fainted monsters (and, when switching, the one
+    // already fighting) cannot be chosen. Returns the monster, or null when backed out.
+    async function pickMon(title, cancellable) {
+      const can = (m) => m.hp > 0 && !(cancellable && m === bt.me);
+      const opts = G.party.map((m) => ({ label: nm(m) + '  Lv.' + m.level, badge: SPECIES[m.sp].type,
+        hp: [m.hp, stats(m).hp], disabled: !can(m) }));
+      const start = !cancellable && can(bt.me) ? G.party.indexOf(bt.me) : Math.max(0, G.party.findIndex(can));
+      const i = await choose(opts, { x: 50, y: 24, w: 380, rowH: 30, title, cancellable, start, kind: 'mon' });
+      return i < 0 ? null : G.party[i];
+    }
 
     async function useMove(side, mvId) {
       const other = side === 'me' ? 'foe' : 'me';
       const att = bt[side], def = bt[other], mv = MOVES[mvId];
+      startCooldown(att, mvId);
       await say((side === 'me' ? nm(att) : foeName()) + 'ใช้ท่า' + mv.name + '!');
       const dir = side === 'me' ? 1 : -1, s = bt.spr[side], hit = bt.spr[other];
       await tween(110, (t) => { s.dx = dir * 20 * t; s.dy = -dir * 9 * t; });
@@ -1064,7 +1095,7 @@
       // the two forms flicker faster and faster, then a white flash settles on the new one
       await tween(2600, (t) => { bt.evo.t = t; bt.fx.t = (t * 3) % 1; bt.evo.showNew = Math.sin(t * t * 70) > 0; });
       await tween(160, (t) => { ui.flash = t; });
-      const before = stats(m).hp;
+      const before = stats(m).hp, oldSp = m.sp;
       m.sp = evo.to;
       m.hp = Math.min(stats(m).hp, m.hp + stats(m).hp - before);
       if (m === bt.me) bt.hp.me = m.hp;
@@ -1072,13 +1103,19 @@
       noteCaught(m.sp);
       await tween(420, (t) => { ui.flash = 1 - t; });
       await say('ยินดีด้วย! ' + oldName + 'วิวัฒนาการเป็น' + nm(m) + 'แล้ว!');
+      // moves of the new form learned at a level already passed (it evolves late, at Lv.20 / 30)
+      const had = SPECIES[oldSp].moves.map((x) => x[1]);
+      for (const [lv, mv] of SPECIES[m.sp].moves) {
+        if (lv <= m.level && !m.moves.includes(mv) && !had.includes(mv)) await learnMove(m, mv);
+      }
       bt.evo = null;
     }
     // After my monster falls: bring in the next one, or lose. Returns false when the battle is lost.
     async function afterMyFaint() {
       await faint('me');
-      const next = G.party.find((m) => m.hp > 0);
-      if (!next) return false;
+      const alive = G.party.filter((m) => m.hp > 0);
+      if (!alive.length) return false;
+      const next = alive.length > 1 ? await pickMon('จะส่งตัวไหนออกไปสู้ต่อ?', false) : alive[0];
       bt.me = next; bt.hp.me = next.hp;
       bt.spr.me = { dx: -220, dy: 0, alpha: 1, blink: false };
       tween(260, (t) => { bt.spr.me.dx = -220 * (1 - t); });
@@ -1098,7 +1135,8 @@
       return false;
     }
     async function foeTurn() {
-      await useMove('foe', bt.foe.moves[rand(bt.foe.moves.length)]);
+      await useMove('foe', foeMove());
+      bt.round++;
       if (bt.me.hp <= 0 && !(await afterMyFaint())) result = 'lose';
     }
 
@@ -1188,15 +1226,28 @@
       ui.prompt = nm(bt.me) + 'จะทำอะไรดี?';
       const act = await choose([
         'ต่อสู้', { label: 'แคปซูล', right: 'x' + itemCount('ball') },
-        { label: 'ยา', right: 'x' + itemCount('heal') }, 'หนี'], { x: 262, y: 236, w: 214, cols: 2, rowH: 33, start: bt.lastAct || 0, kind: 'act' });
+        { label: 'ยา', right: 'x' + itemCount('heal') }, 'เปลี่ยนตัว', 'หนี'],
+        { x: 262, y: 233, w: 214, cols: 2, rowH: 24, start: bt.lastAct || 0, kind: 'act' });
       bt.lastAct = act;
       ui.prompt = null;
+      const what = ['fight', 'ball', 'heal', 'switch', 'run'][act];
 
-      if (act === 0) {
-        const i = await choose(bt.me.moves.map((id) => moveOption(id, bt.foe)), {
-          x: 4, y: 236, w: 472, cols: 2, rowH: 33, minH: 80, cancellable: true, kind: 'move' });
+      if (what === 'fight') {
+        // moves still resting are greyed out; if every move is resting, a basic tackle is offered
+        const ids = bt.me.moves.slice();
+        if (ids.every((id) => cdLeft(bt.me, id) > 0)) ids.push('tackle');
+        const opts = ids.map((id, k) => {
+          const o = moveOption(id, bt.foe), left = k < bt.me.moves.length ? cdLeft(bt.me, id) : 0, cd = moveCooldown(id);
+          if (left) { o.disabled = true; o.sub = 'พักอีก ' + left + ' เทิร์น'; o.subColor = '#a39c8c'; }
+          else if (cd) o.sub += '  · พัก ' + cd;
+          if (k >= bt.me.moves.length) o.label += ' (ท่าพื้นฐาน)';
+          return o;
+        });
+        const i = await choose(opts, {
+          x: 4, y: 236, w: 472, cols: 2, rowH: 33, minH: 80, cancellable: true, kind: 'move', data: ids,
+          start: Math.max(0, opts.findIndex((o) => !o.disabled)) });
         if (i < 0) continue;
-        const mine = bt.me.moves[i], theirs = bt.foe.moves[rand(bt.foe.moves.length)];
+        const mine = ids[i], theirs = foeMove();
         const ms = stats(bt.me).spd, fs = stats(bt.foe).spd;
         const first = ms > fs || (ms === fs && Math.random() < 0.5) ? 'me' : 'foe';
         for (const side of first === 'me' ? ['me', 'foe'] : ['foe', 'me']) {
@@ -1204,7 +1255,19 @@
           if (bt.foe.hp <= 0) { if (await afterFoeFaint()) result = 'win'; break; }
           if (bt.me.hp <= 0) { if (!(await afterMyFaint())) result = 'lose'; break; }
         }
-      } else if (act === 1) {
+        bt.round++;
+      } else if (what === 'switch') {
+        if (G.party.filter((m) => m.hp > 0).length < 2) { await say('ไม่มีมอนสเตอร์ตัวอื่นที่สู้ไหวแล้ว'); continue; }
+        const next = await pickMon('จะเปลี่ยนเป็นตัวไหน?', true);
+        if (!next) continue;
+        await say('กลับมาก่อน ' + nm(bt.me) + '!');
+        await tween(220, (t) => { bt.spr.me.dx = -220 * t; });
+        bt.me = next; bt.hp.me = next.hp;
+        bt.spr.me = { dx: -220, dy: 0, alpha: 1, blink: false };
+        await tween(260, (t) => { bt.spr.me.dx = -220 * (1 - t); });
+        await say('ลุยเลย ' + nm(next) + '!');
+        await foeTurn();                  // switching takes the turn: the foe attacks the newcomer
+      } else if (what === 'ball') {
         if (trainer) { await say('ใช้แคปซูลกับมอนสเตอร์ที่มีเจ้าของแล้วไม่ได้!'); continue; }
         const ball = await pickItem('ball');
         if (!ball) continue;
@@ -1235,7 +1298,7 @@
           await say('โธ่ มันหลุดออกมาได้!');
           await foeTurn();
         }
-      } else if (act === 2) {
+      } else if (what === 'heal') {
         const max = stats(bt.me).hp;
         if (itemCount('heal') && bt.me.hp >= max) { await say(nm(bt.me) + 'ยังแข็งแรงเต็มที่อยู่'); continue; }
         const med = await pickItem('heal');
@@ -1247,7 +1310,7 @@
         await tween(350, (t) => { bt.hp.me = from + (bt.me.hp - from) * t; });
         await say('พลังชีวิตฟื้นขึ้น ' + (bt.me.hp - from) + ' แต้ม');
         await foeTurn();
-      } else {
+      } else {                            // run
         if (trainer) { await say('หนีจากการประลองไม่ได้!'); continue; }
         if (Math.random() < (stats(bt.me).spd >= stats(bt.foe).spd ? 0.95 : 0.6)) { await say('หนีออกมาได้อย่างปลอดภัย'); result = 'run'; }
         else { await say('หนีไม่พ้น!'); await foeTurn(); }
@@ -1740,17 +1803,25 @@
     const labels = m.opts.map((o) => o.label);
     if (labels[0] === 'ใช่' && labels[1] === 'ไม่') return 0;
     if (m.kind === 'act' && bt) {
-      const me = bt.me, foe = bt.foe, wild = bt.trainerX === null;
-      if (bt.legend) return 3;                                    // the legend: just back away
-      if (hpRatio(me) < 0.3 && itemCount('heal') > 0) return 2;
-      if (wild && !G.caught.includes(foe.sp) && itemCount('ball') > 0 && foe.hp / stats(foe).hp < 0.5) return 1;
-      if (wild && hpRatio(me) < 0.2) return 3;
-      return 0;
+      const me = bt.me, foe = bt.foe, wild = bt.trainerX === null, at = (l) => labels.indexOf(l);
+      if (bt.legend) return at('หนี');                            // the legend: just back away
+      if (hpRatio(me) < 0.3 && itemCount('heal') > 0) return at('ยา');
+      if (wild && !G.caught.includes(foe.sp) && itemCount('ball') > 0 && foe.hp / stats(foe).hp < 0.5) return at('แคปซูล');
+      if (wild && hpRatio(me) < 0.2) return at('หนี');
+      return at('ต่อสู้');
     }
-    if (m.kind === 'move' && bt) {
-      let best = 0;
-      bt.me.moves.forEach((id, i) => { if (moveScore(id, bt.me, bt.foe) > moveScore(bt.me.moves[best], bt.me, bt.foe)) best = i; });
-      return best;
+    if (m.kind === 'move' && bt) {                               // strongest move that is ready
+      let best = -1;
+      m.data.forEach((id, i) => {
+        if (m.opts[i].disabled) return;
+        if (best < 0 || moveScore(id, bt.me, bt.foe) > moveScore(m.data[best], bt.me, bt.foe)) best = i;
+      });
+      return Math.max(0, best);
+    }
+    if (m.kind === 'mon') {                                       // the healthiest monster that can go
+      let best = -1;
+      G.party.forEach((mon, i) => { if (!m.opts[i].disabled && (best < 0 || hpRatio(mon) > hpRatio(G.party[best]))) best = i; });
+      return best < 0 ? (m.cancellable ? -1 : 0) : best;
     }
     if (m.kind === 'item') {
       const have = m.data;

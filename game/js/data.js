@@ -107,12 +107,21 @@ const MOVES = {
   moon_lantern:   { name: 'โคมจันทรา',        type: 'ghost',    power: 85 },
 };
 
+// Cooldown: after a move is used, it rests for this many turns before it can be used again.
+// Weak moves (power 50 or less) can be used every turn; the stronger the move, the longer
+// the rest. A move may set its own value with "cd".
+function moveCooldown(id) {
+  const mv = MOVES[id];
+  if (mv.cd !== undefined) return mv.cd;
+  return mv.power <= 50 ? 0 : mv.power <= 65 ? 1 : mv.power <= 80 ? 2 : 3;
+}
+
 // levels at which a monster reaches its first and its final evolution
-const EVO_LEVEL_1 = 7, EVO_LEVEL_2 = 13;
+const EVO_LEVEL_1 = 20, EVO_LEVEL_2 = 30;
 // the monsters of stage 2 (Route 1) evolve once, at this level
-const EVO_LEVEL_ROUTE = 10;
+const EVO_LEVEL_ROUTE = 20;
 // the floating-market monsters of stage 4 evolve once, at this level
-const EVO_LEVEL_TOWN = 20;
+const EVO_LEVEL_TOWN = 20;   // all first evolutions happen at Lv.20, second ones at Lv.30
 
 // moves: [level learned, move id]. A monster learns each move on reaching that level;
 // past MAX_MOVES the player picks one to forget.
