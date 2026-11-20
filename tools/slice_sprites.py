@@ -343,7 +343,9 @@ BASE_NAMES = {"starters": ["starter_fire_lamb", "starter_water_narwhal", "starte
               "new_a": ["wild_fire_frog", "wild_water_crab", "wild_water_duck",
                         "wild_leaf_durian", "wild_leaf_bat"],
               "new_b": ["wild_electric_gecko", "wild_rock_snail", "wild_ghost_kite",
-                        "wild_normal_rooster", "wild_normal_buffalo"]}
+                        "wild_normal_rooster", "wild_normal_buffalo"],
+              "new_c": ["wild_water_betta", "wild_ghost_krathong", "wild_electric_firefly",
+                        "wild_leaf_hyacinth", "wild_fire_kingfisher"]}
 EVO_CELL = {"evo1": 72, "evo2": 80}
 for group, base in BASE_NAMES.items():
     for stage, cell in EVO_CELL.items():

@@ -92,6 +92,12 @@ const MOVES = {
   vine_tangle:   { name: 'รากพันขา',        type: 'leaf',     power: 50 },
   bloom_raft:    { name: 'แพดอกผักตบ',      type: 'leaf',     power: 75 },
   dive_flame:    { name: 'โฉบเพลิง',         type: 'fire',     power: 75 },
+  // strongest move of each evolved floating-market monster, learned at level 22
+  silk_torrent:   { name: 'สายธารแพรไหม', type: 'water', power: 85 },
+  lantern_parade: { name: 'ขบวนกระทงวิญญาณ', type: 'ghost', power: 85 },
+  star_field:     { name: 'ทุ่งดาวหิ่งห้อย', type: 'electric', power: 85 },
+  floating_isle:  { name: 'เกาะลอยพิฆาต', type: 'leaf', power: 85 },
+  phoenix_dive:   { name: 'ดิ่งเพลิงสุริยา', type: 'fire', power: 85 },
   // strongest move of each final evolution
   inferno_horn:   { name: 'เขาเพลิงผลาญ',    type: 'fire',     power: 85 },
   tidal_spiral:   { name: 'เกลียวคลื่นยักษ์', type: 'water',    power: 85 },
@@ -105,6 +111,8 @@ const MOVES = {
 const EVO_LEVEL_1 = 7, EVO_LEVEL_2 = 13;
 // the monsters of stage 2 (Route 1) evolve once, at this level
 const EVO_LEVEL_ROUTE = 10;
+// the floating-market monsters of stage 4 evolve once, at this level
+const EVO_LEVEL_TOWN = 20;
 
 // moves: [level learned, move id]. A monster learns each move on reaching that level;
 // past MAX_MOVES the player picks one to forget.
@@ -179,19 +187,41 @@ const SPECIES = {
   // already know their middle move when met.
   betta:      { name: 'ปลากัดรุ้ง',      type: 'water',    img: 'wild_water_betta',
                 hp: 50, atk: 62, def: 46, spd: 66,
-                moves: [[1, 'tackle'], [1, 'fin_whip'], [12, 'bubble'], [17, 'rainbow_fin']] },
+                moves: [[1, 'tackle'], [1, 'fin_whip'], [12, 'bubble'], [17, 'rainbow_fin']],
+                evolve: { level: EVO_LEVEL_TOWN, to: 'betta2' } },
   krathong:   { name: 'กระทงผี',        type: 'ghost',    img: 'wild_ghost_krathong',
                 hp: 52, atk: 58, def: 54, spd: 56,
-                moves: [[1, 'tackle'], [1, 'candle_wisp'], [12, 'ember'], [17, 'river_drift']] },
+                moves: [[1, 'tackle'], [1, 'candle_wisp'], [12, 'ember'], [17, 'river_drift']],
+                evolve: { level: EVO_LEVEL_TOWN, to: 'krathong2' } },
   firefly:    { name: 'หิ่งห้อยสายฟ้า',  type: 'electric', img: 'wild_electric_firefly',
                 hp: 46, atk: 60, def: 44, spd: 72,
-                moves: [[1, 'tackle'], [1, 'glow_flash'], [12, 'wing_slap'], [17, 'swarm_bolt']] },
+                moves: [[1, 'tackle'], [1, 'glow_flash'], [12, 'wing_slap'], [17, 'swarm_bolt']],
+                evolve: { level: EVO_LEVEL_TOWN, to: 'firefly2' } },
   hyacinth:   { name: 'ผักตบชวา',       type: 'leaf',     img: 'wild_leaf_hyacinth',
                 hp: 64, atk: 50, def: 62, spd: 40,
-                moves: [[1, 'tackle'], [1, 'vine_tangle'], [12, 'bubble'], [17, 'bloom_raft']] },
+                moves: [[1, 'tackle'], [1, 'vine_tangle'], [12, 'bubble'], [17, 'bloom_raft']],
+                evolve: { level: EVO_LEVEL_TOWN, to: 'hyacinth2' } },
   kingfisher: { name: 'กระเต็นเพลิง',    type: 'fire',     img: 'wild_fire_kingfisher',
                 hp: 48, atk: 66, def: 42, spd: 70,
-                moves: [[1, 'peck'], [1, 'ember'], [12, 'wing_slap'], [17, 'dive_flame']] },
+                moves: [[1, 'peck'], [1, 'ember'], [12, 'wing_slap'], [17, 'dive_flame']],
+                evolve: { level: EVO_LEVEL_TOWN, to: 'kingfisher2' } },
+  // Evolved forms of the floating-market monsters (stage 4); each evolves once, at EVO_LEVEL_TOWN.
+  // Stats are the base form's x1.35.
+  betta2: { name: 'ปลากัดราชันย์', type: 'water', img: 'wild_water_betta_evo1',
+              hp: 68, atk: 84, def: 62, spd: 89,
+              moves: [[1, 'tackle'], [1, 'fin_whip'], [12, 'bubble'], [17, 'rainbow_fin'], [22, 'silk_torrent']] },
+  krathong2: { name: 'กระทงเทียนหลวง', type: 'ghost', img: 'wild_ghost_krathong_evo1',
+              hp: 70, atk: 78, def: 73, spd: 76,
+              moves: [[1, 'tackle'], [1, 'candle_wisp'], [12, 'ember'], [17, 'river_drift'], [22, 'lantern_parade']] },
+  firefly2: { name: 'หิ่งห้อยจักรพรรดิ', type: 'electric', img: 'wild_electric_firefly_evo1',
+              hp: 62, atk: 81, def: 59, spd: 97,
+              moves: [[1, 'tackle'], [1, 'glow_flash'], [12, 'wing_slap'], [17, 'swarm_bolt'], [22, 'star_field']] },
+  hyacinth2: { name: 'เกาะผักตบยักษ์', type: 'leaf', img: 'wild_leaf_hyacinth_evo1',
+              hp: 86, atk: 68, def: 84, spd: 54,
+              moves: [[1, 'tackle'], [1, 'vine_tangle'], [12, 'bubble'], [17, 'bloom_raft'], [22, 'floating_isle']] },
+  kingfisher2: { name: 'พญากระเต็นอัคคี', type: 'fire', img: 'wild_fire_kingfisher_evo1',
+              hp: 65, atk: 89, def: 57, spd: 94,
+              moves: [[1, 'peck'], [1, 'ember'], [12, 'wing_slap'], [17, 'dive_flame'], [22, 'phoenix_dive']] },
   // Evolved forms of the second set (stage 2). Each of them evolves once, at EVO_LEVEL_ROUTE.
   // Stats are the base form's x1.35.
   frog2: { name: 'คางคกประทีป', type: 'fire', img: 'wild_fire_frog_evo1',
