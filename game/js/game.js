@@ -212,6 +212,12 @@
   }
   const pageLength = (p) => p.reduce((n, l) => n + l.length, 0);
 
+  // the given index, or the nearest choice after (then before) it that can be taken
+  function firstOpen(opts, at) {
+    for (let i = at; i < opts.length; i++) if (!opts[i].disabled) return i;
+    for (let i = at - 1; i >= 0; i--) if (!opts[i].disabled) return i;
+    return at;
+  }
   // A menu. Resolves with the chosen index, or -1 when cancelled.
   function choose(options, o = {}) {
     return new Promise((resolve) => {
@@ -224,7 +230,7 @@
       ui.menu = {
         opts, cols, rowH, w, h, titleH, title: o.title, footer: o.footer,
         x: o.x !== undefined ? o.x : VW - w - 8, y: o.y !== undefined ? o.y : 228 - h,
-        index: Math.min(o.start || 0, opts.length - 1), cancellable: !!o.cancellable, onMove: o.onMove, resolve,
+        index: firstOpen(opts, Math.min(o.start || 0, opts.length - 1)), cancellable: !!o.cancellable, onMove: o.onMove, resolve,
         kind: o.kind, data: o.data,
       };
       if (o.onMove) o.onMove(ui.menu.index);
@@ -365,6 +371,7 @@
       const i = row * m.cols + col;
       const inside = x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h;
       if (inside && col >= 0 && col < m.cols && row >= 0 && i < m.opts.length) {
+        if (m.opts[i].disabled) { AUDIO.sfx('bump'); return; }
         if (i !== m.index) { m.index = i; if (m.onMove) m.onMove(i); }
         press('ok', false);
       } else if (!inside && m.cancellable) press('back', false);
@@ -384,10 +391,13 @@
     if (ui.menu) {
       const m = ui.menu, n = m.opts.length;
       let i = m.index;
-      if (k === 'up') i -= m.cols; else if (k === 'down') i += m.cols;
-      else if (k === 'left' && m.cols > 1) i -= 1; else if (k === 'right' && m.cols > 1) i += 1;
-      else if (k === 'ok' && !repeat) {
-        if (m.opts[m.index].disabled) return;
+      const stepBy = k === 'up' ? -m.cols : k === 'down' ? m.cols : k === 'left' && m.cols > 1 ? -1 : k === 'right' && m.cols > 1 ? 1 : 0;
+      if (stepBy) {
+        i += stepBy;
+        while (i >= 0 && i < n && m.opts[i].disabled) i += stepBy;   // skip what cannot be chosen
+        if (i < 0 || i >= n) i = m.index;
+      } else if (k === 'ok' && !repeat) {
+        if (m.opts[m.index].disabled) { AUDIO.sfx('bump'); return; }
         AUDIO.sfx('confirm');
         ui.menu = null; m.resolve(m.index); return;
       } else if (k === 'back' && !repeat && m.cancellable) { AUDIO.sfx('cancel'); ui.menu = null; m.resolve(-1); return; }
