@@ -177,7 +177,8 @@ def walk_sheet(src, prefix, folder, colors=32):
 
 sheet = walk_sheet("hero_walk_sheet.png", "hero", "hero")
 npc_walks = []
-for who in ["researcher", "rival", "shopkeeper", "healer", "gym_leader", "gym_hiker", "gym_kid"]:
+for who in ["researcher", "rival", "shopkeeper", "healer", "gym_leader", "gym_hiker", "gym_kid",
+            "gym2_leader", "gym2_rower", "gym2_swimmer"]:
     if os.path.exists(os.path.join(SRC, f"npc_{who}_walk_sheet.png")):
         npc_walks.append(walk_sheet(f"npc_{who}_walk_sheet.png", f"npc_{who}", f"npc_{who}"))
 
@@ -324,7 +325,9 @@ for src, names in [
         ("monsters_new_a", ["wild_fire_frog", "wild_water_crab", "wild_water_duck",
                             "wild_leaf_durian", "wild_leaf_bat"]),
         ("monsters_new_b", ["wild_electric_gecko", "wild_rock_snail", "wild_ghost_kite",
-                            "wild_normal_rooster", "wild_normal_buffalo"])]:
+                            "wild_normal_rooster", "wild_normal_buffalo"]),
+        ("monsters_new_c", ["wild_water_betta", "wild_ghost_krathong", "wild_electric_firefly",
+                            "wild_leaf_hyacinth", "wild_fire_kingfisher"])]:
     if not os.path.exists(os.path.join(SRC, src + ".png")):
         continue
     new_strips.append(lineup(src + ".png", names, 64, 64, "monsters", src[9:] + "_64x64.png", 24))

@@ -74,7 +74,8 @@
   function allImages() {
     const names = ['terrain', 'battle_bg', 'chars/hero', 'chars/npc_researcher', 'chars/npc_rival',
       'chars/npc_shopkeeper', 'chars/npc_healer', 'chars/rival_large',
-      'chars/npc_gym_leader', 'chars/npc_gym_hiker', 'chars/npc_gym_kid'];
+      'chars/npc_gym_leader', 'chars/npc_gym_hiker', 'chars/npc_gym_kid',
+      'chars/npc_gym2_leader', 'chars/npc_gym2_rower', 'chars/npc_gym2_swimmer'];
     for (const n of Object.keys(SPRITE_META.objects)) names.push('objects/' + n);
     for (const n of Object.keys(SPRITE_META.buildings)) names.push('buildings/' + n);
     for (const n of Object.keys(SPRITE_META.furniture)) names.push('furniture/' + n);
@@ -602,6 +603,7 @@
       await say('ศูนย์รักษายินดีต้อนรับ ให้ฉันดูแลมอนสเตอร์ของเธอนะ');
       if (!G.party.length) { await say('อ้าว เธอยังไม่มีมอนสเตอร์นี่นา ไปหาศาสตราจารย์สนก่อนสิ'); return; }
       await fadeTo(0.6, 250); healParty(); await wait(350); await fadeTo(0, 250);
+      G.healSpot = { map: MAP.id, c: HEAL_SPOT.c, r: HEAL_SPOT.r, dir: 'up' };   // wake up here after a loss
       await say('เรียบร้อย! ทุกตัวแข็งแรงเต็มที่แล้ว');
       save();
     },
@@ -697,6 +699,45 @@
       await say('เปิดลังไม้ดู...\nพบแคปซูล 4 ลูกและยา 2 ขวด!'); save();
     },
 
+    // ---- Bang Bua town and the Water Gym (stage 4)
+    async gym2_swimmer() { await gymTrainer(GYM2.swimmer, 'gym2_swimmer',
+      'ว่ายน้ำทุกเช้าจนตัวเบาเป็นปลา! มอนสเตอร์น้ำของหนูก็ปราดเปรียวเหมือนกัน',
+      'แพ้แล้ว... ขอไปว่ายน้ำคลายเครียดก่อนนะ ผ่านไปได้เลย',
+      'ธาตุน้ำแพ้ทางพืชกับไฟฟ้านะ จำไว้ให้ดีล่ะ'); },
+    async gym2_rower() { await gymTrainer(GYM2.rower, 'gym2_rower',
+      'พายเรือส่งของในคลองมาสามสิบปี แรงแขนลุงยังดีอยู่! มาลองกันหน่อย',
+      'ฮ่า ๆ เก่งจริง! หัวหน้ายิมรออยู่ข้างใน เธอเก่งกว่าลุงอีกนะ',
+      'หัวหน้ายิมชอบใช้มอนสเตอร์ที่ทนทาน เตรียมยาไปให้พอ'); },
+    async gym2_leader() {
+      const g = GYM2.leader;
+      if (G.flags[g.flag]) { await say('เหรียญวารีเหมาะกับเธอมาก\nทางไปด่าน 5 อยู่ทางใต้ของตลาด ขอให้โชคดีนะ'); return; }
+      if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของเธอหมดแรงหมดแล้ว ไปพักที่ศูนย์รักษาข้างตลาดก่อนเถอะ'); return; }
+      await say('ยินดีต้อนรับสู่ยิมวารี! ฉันคือบัวน้ำ หัวหน้ายิมแห่งนี้');
+      await say('สายน้ำดูอ่อนโยน แต่กัดเซาะได้แม้แต่หินผา\nมาดูกันว่าเธอจะรับมือกระแสน้ำของฉันได้ไหม!');
+      const result = await battle(g.team.map(([sp, lv]) => makeMon(sp, lv)), { name: g.name, sheet: 'chars/npc_gym2_leader' });
+      if (result !== 'win') return;
+      G.flags[g.flag] = true;
+      G.bag.potion_plus += 3;
+      await say('สุดยอดเลย! เธอไหลไปกับกระแสได้อย่างงดงาม\nรับเหรียญวารีนี้ไป เป็นหลักฐานว่าเธอชนะยิมแห่งนี้');
+      await say('ได้รับเหรียญวารี และยาชั้นดี 3 ขวด!');
+      await say('ยินดีด้วย! คุณผ่านด่าน 4 แล้ว\nทางไปด่าน 5 อยู่ทางใต้ของตลาด (จะเปิดในเวอร์ชันถัดไป)');
+      save();
+    },
+    async gym2_books() { await say('ตำรายิมวารี\n"ธาตุน้ำชนะไฟและหิน แต่แพ้ทางพืชกับไฟฟ้า"'); },
+    async sign_t4_top() { await say('ตลาดน้ำบางบัว\nทิศเหนือ : เส้นทางที่ 2   ทิศใต้ : ทางไปด่าน 5'); },
+    async sign_t4_market() { await say('ลานตลาดน้ำ\nตะวันตก : ศูนย์รักษา   ตะวันออก : ยิมวารี'); },
+    async sign_t4_end() { await say('ทิศใต้ : ทางไปด่าน 5\nต้องมีเหรียญวารีจากยิมจึงจะผ่านได้'); },
+    async t4_crate_a() {
+      if (G.flags.t4a) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.t4a = true; G.bag.capsule_gold += 3;
+      await say('เปิดลังไม้ดู...\nพบแคปซูลทอง 3 ลูก!'); save();
+    },
+    async t4_crate_b() {
+      if (G.flags.t4b) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.t4b = true; G.bag.potion_plus += 2; G.gold += 500;
+      await say('เปิดลังไม้ดู...\nพบยาชั้นดี 2 ขวด และเหรียญทอง 500 ทอง!'); save();
+    },
+
     // ---- Route 2 (stage 3)
     async r2_hiker() { await gymTrainer(ROUTE2_TRAINERS.hiker, 'r2_hiker',
       'ทุ่งผาหินนี้ลมแรงนัก มอนสเตอร์ที่อยู่รอดได้ต้องแกร่งจริง\nมาลองดูว่าทีมเธอแกร่งพอไหม!',
@@ -707,7 +748,7 @@
       'แพ้แล้ว... ปลาก็ไม่กินเบ็ด มอนสเตอร์ก็แพ้ วันนี้ซวยจัง',
       'พงหญ้าทางใต้มีมอนสเตอร์ที่วิวัฒนาการแล้วด้วยนะ หนูเคยเห็นแกะเพลิงตัวโตด้วย!'); },
     async rival3() {
-      if (G.flags.stage3) { await say('ด่าน 4 อยู่ข้างหน้าแล้ว... แต่ได้ยินว่าทางยังสร้างไม่เสร็จ\nไว้ทางเปิดเมื่อไหร่ เราไปผจญภัยกันต่อนะ!'); return; }
+      if (G.flags.stage3) { await say('ตลาดน้ำบางบัวอยู่ข้างหน้าแล้ว ที่นั่นมียิมวารีด้วยนะ\nไปท้าประลองให้ได้เหรียญมาอีกเหรียญสิ!'); return; }
       if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปดื่มน้ำพุฟื้นพลังก่อนเถอะ'); return; }
       await say('ในที่สุดก็มาถึง! ฉันรอนายอยู่ตรงนี้นานแล้ว\nคู่หูของฉันวิวัฒนาการจนถึงร่างสุดท้ายแล้วนะ');
       await say('นี่คือการประลองครั้งสุดท้ายของด่านนี้ ทุ่มให้สุดตัวเลย!');
@@ -718,12 +759,12 @@
       G.bag.capsule += 5; G.bag.potion += 5;
       await say('...แพ้อีกจนได้ แต่ครั้งนี้ฉันไม่เสียใจเลย\nนายคือคู่แข่งที่ดีที่สุดของฉัน');
       await say('ได้รับแคปซูล 5 ลูกและยา 5 ขวด!');
-      await say('ยินดีด้วย! คุณผ่านด่าน 3 แล้ว\nทางไปด่าน 4 อยู่ทางใต้ (จะเปิดในเวอร์ชันถัดไป)');
+      await say('ยินดีด้วย! คุณผ่านด่าน 3 แล้ว\nเดินต่อไปทางใต้คือด่าน 4 ตลาดน้ำบางบัว');
       save();
     },
-    async sign_r2_top() { await say('เส้นทางที่ 2  ทุ่งผาหิน\nทิศเหนือ : เส้นทางที่ 1   ทิศใต้ : ทางไปด่าน 4'); },
+    async sign_r2_top() { await say('เส้นทางที่ 2  ทุ่งผาหิน\nทิศเหนือ : เส้นทางที่ 1   ทิศใต้ : ตลาดน้ำบางบัว (ด่าน 4)'); },
     async sign_r2_spring() { await say('ลานน้ำพุผาหิน\nสำรวจบ่อน้ำเพื่อฟื้นพลังมอนสเตอร์ได้ทุกเมื่อ'); },
-    async sign_r2_end() { await say('ทิศใต้ : ทางไปด่าน 4\nคู่แข่งของคุณรออยู่ตรงทางออก'); },
+    async sign_r2_end() { await say('ทิศใต้ : ตลาดน้ำบางบัว (ด่าน 4)\nคู่แข่งของคุณรออยู่ตรงทางออก'); },
     async r2_crate_a() {
       if (G.flags.r2a) { await say('ลังไม้ว่างเปล่า'); return; }
       G.flags.r2a = true; G.bag.capsule += 4;
@@ -850,7 +891,7 @@
         x: 50, y: 24, w: 380, rowH: 30, cancellable: true, start: at,
         title: G.party.length ? 'ทีมมอนสเตอร์  (เลือกเพื่อดูข้อมูล)' : 'ยังไม่มีมอนสเตอร์ในทีม',
         footer: 'ทอง ' + G.gold + '   แคปซูล ' + itemCount('ball') + '   ยา ' + itemCount('heal')
-          + '   จับได้ ' + goalCaught().length + '/6   เหรียญตรา ' + (G.flags.badge1 ? 1 : 0) });
+          + '   จับได้ ' + goalCaught().length + '/6   เหรียญตรา ' + ((G.flags.badge1 ? 1 : 0) + (G.flags.badge2 ? 1 : 0)) });
       if (i < 0) break;
       at = i;
       if (i === G.party.length) {          // the type table
@@ -1225,8 +1266,9 @@
     bt = null; mode = 'world';
     if (result === 'lose') {
       healParty();
-      setMap(HEAL_SPOT.map);
-      placePlayer(HEAL_SPOT);
+      const spot = G.healSpot || HEAL_SPOT;
+      setMap(spot.map);
+      placePlayer(spot);
     }
     save();
     await fadeTo(0, 240);
@@ -1768,9 +1810,9 @@
     // 2. tired: heal at the spring, or at the healing centre in the village
     else if (teamRatio() < 0.45 || G.party.every((m) => m.hp <= 0)) {
       if (spots('spring').length && botVisit(spots('spring'), true)) return;
-      if (MAP.id === 'heal' && botVisit(spots('healer'), true)) return;
-      if (MAP.id === 'village') {
-        const door = [...MAP.warps].find(([, w]) => w.map === 'heal');
+      if (MAP.indoor && spots('healer').length && botVisit(spots('healer'), true)) return;
+      {
+        const door = [...MAP.warps].find(([, w]) => (ROOMS[w.map] || {}).kind === 'heal' || w.map === 'heal');
         if (door) { const step = botPath(new Set([door[0]]), true); if (step) { pl.dir = step; tryMove(step); return; } }
       }
     }

@@ -624,6 +624,12 @@ if os.path.exists(os.path.join(SRC, "tileset_buildings.png")):
             sc = width / (b[2] - b[0])
             buildings[name] = on_canvas(reduce_palette(
                 resample(t, b, width, round((b[3] - b[1]) * sc)), 40), T, T)
+    # the Water Gym of stage 4, drawn on its own sheet, six tiles wide like the first gym
+    if os.path.exists(os.path.join(SRC, "tileset_gym2.png")):
+        g = despeckle(load("tileset_gym2.png"))
+        gb = piece_grid(g, 1, 1)[0]
+        buildings["gym2"] = on_canvas(reduce_palette(
+            resample(g, gb, 192, round((gb[3] - gb[1]) * 192 / (gb[2] - gb[0]))), 40), T, T)
     bld_sheet = pack(buildings, "buildings", "tileset_buildings")
     print("buildings:", len(buildings), f"{1 / s:.2f} source px per pixel")
 

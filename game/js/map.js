@@ -108,11 +108,15 @@ const ROOMS = {
   shop:  { w: 11, h: 8, exit: 5, door: [25, 18] },
   mill:  { w: 9,  h: 8, exit: 4, door: [28, 25] },
   gym:   { w: 13, h: 12, exit: 6, door: [13, 25], from: 'route1', floor: 'cobble' },
+  // stage 4 (the town): a second healing centre (laid out like the first) and the Water Gym
+  heal2: { w: 11, h: 8, exit: 5, door: [6, 15], from: 'town', kind: 'heal' },
+  gym2:  { w: 13, h: 12, exit: 6, door: [24, 15], from: 'town' },
 };
 
 function buildRoom(id) {
   const spec = ROOMS[id];
   const B = mapBuilder(id, spec.w, spec.h + 1, spec.floor || 'floor_wood');   // one extra row below: the doorway
+  const kind = spec.kind || id;          // rooms of the same kind share one layout
   const m = B.m;
   m.indoor = true;
   for (let c = 0; c < spec.w; c++) {
@@ -148,7 +152,7 @@ function buildRoom(id) {
     f('table', 2, 5, { id: 'lab_table' }); f('stool', 4, 5);
     f('bookshelf', 10, 5, { id: 'lab_books' });
     f('plant', 0, 8); f('plant', 12, 8);
-  } else if (id === 'heal') {
+  } else if (kind === 'heal') {
     f('rug', 4, 6, { walkable: true, flat: true });
     f('reception_desk', 4, 3, { id: 'healer' });
     f('healing_machine', 8, 2, { id: 'heal_machine' });
@@ -178,6 +182,24 @@ function buildRoom(id) {
     m.npcs.push({ id: 'gym_kid', sheet: 'chars/npc_gym_kid', c: 6, r: 5, dir: 'down',
                   moved: { flag: 'gym2', c: 7, r: 6, dir: 'left' } });
     m.npcs.push({ id: 'gym_leader', sheet: 'chars/npc_gym_leader', c: 6, r: 3, dir: 'down' });
+  } else if (id === 'gym2') {
+    // Two canals cross the hall; a trainer stands on the plank bridge over each and steps
+    // aside once beaten. The leader waits on the rug at the far end.
+    f('rug', 5, 3, { walkable: true, flat: true });
+    for (const row of [5, 8]) {
+      for (let c = 0; c < spec.w; c++) {
+        m.ground[row][c] = c === 6 ? 'bridge_v' : 'water';
+        if (c !== 6) B.block(c, row);
+      }
+    }
+    f('plant', 0, 2); f('plant', 12, 2); f('plant', 0, 11); f('plant', 12, 11);
+    f('bookshelf', 1, 2, { id: 'gym2_books' }); f('bookshelf', 10, 2, { id: 'gym2_books' });
+    o('water_jar', 1, 10); o('water_jar', 11, 10);
+    m.npcs.push({ id: 'gym2_swimmer', sheet: 'chars/npc_gym2_swimmer', c: 6, r: 8, dir: 'down',
+                  moved: { flag: 'g2a', c: 7, r: 9, dir: 'left' } });
+    m.npcs.push({ id: 'gym2_rower', sheet: 'chars/npc_gym2_rower', c: 6, r: 5, dir: 'down',
+                  moved: { flag: 'g2b', c: 7, r: 6, dir: 'left' } });
+    m.npcs.push({ id: 'gym2_leader', sheet: 'chars/npc_gym2_leader', c: 6, r: 3, dir: 'down' });
   } else if (id === 'mill') {
     f('millstone', 3, 4, { id: 'mill_stone' });
     f('sacks', 0, 2); f('sacks', 1, 2); f('sacks', 7, 6, { id: 'mill_sacks' }); f('sacks', 8, 6);
@@ -447,14 +469,86 @@ function buildRoute2() {
   m.npcs.push({ id: 'vendor', sheet: 'chars/npc_shopkeeper', c: 8, r: 28, dir: 'right' });   // travelling merchant
   m.exits.push({ side: 'up', c0: R2_ENTRY, c1: R2_ENTRY + 2, to: { map: 'route1', dc: 19 - R2_ENTRY, r: R1_H - 1 } });
   // the road on to stage 4 opens after the final duel with the rival; stage 4 is not built yet
-  m.exits.push({ side: 'down', c0: 22, c1: 24, to: null, need: 'stage3',
-                 lockedText: 'พายุยืนขวางทางอยู่ข้างหน้า\nต้องประลองชนะเขาก่อนจึงจะผ่านไปได้',
-                 soonText: 'ทางไปด่าน 4 อยู่ข้างหน้าแล้ว!\nแต่ด่าน 4 ยังอยู่ระหว่างสร้าง จะตามมาในเวอร์ชันถัดไป' });
+  m.exits.push({ side: 'down', c0: 22, c1: 24, to: { map: 'town', dc: T4_ENTRY - 22, r: 0 }, need: 'stage3',
+                 lockedText: 'พายุยืนขวางทางอยู่ข้างหน้า\nต้องประลองชนะเขาก่อนจึงจะผ่านไปได้' });
+  return m;
+}
+
+// Stage 4: Bang Bua, a floating-market town on the canals. A canal crosses the road on the
+// way in; the market square has stalls and a merchant; the Water Gym and a second healing
+// centre stand on either side. Its badge opens the road to stage 5 (not built yet).
+const T4_W = 32, T4_H = 34;
+const T4_ENTRY = 14;                    // first column of the road where it comes in from Route 2
+function buildTown() {
+  const rng = seededRandom(20261122);
+  const B = mapBuilder('town', T4_W, T4_H, 'grass');
+  const m = B.m, ground = m.ground, block = B.block;
+  m.title = 'ด่าน 4  ตลาดน้ำบางบัว';
+  for (let r = 0; r < T4_H; r++) for (let c = 0; c < T4_W; c++) {
+    const v = rng();
+    ground[r][c] = v < 0.70 ? 'grass' : v < 0.88 ? 'grass_tufts' : v < 0.95 ? 'grass_white_flowers' : 'grass_color_flowers';
+  }
+  const put = (layout) => { for (const [k, name] of layout) { const [c, r] = k.split(',').map(Number); ground[r][c] = name; } };
+
+  // ---- the road: in at the top, over the canal on a narrow bridge, down the main street,
+  // out at the bottom; narrow paths lead to the healing centre and the gym
+  const road = union(rect(14, 0, 16, 6), rect(14, 10, 16, 33));
+  put(stripLayout('path', road, cells([...line(15, 7, 15, 9), ...line(7, 16, 13, 16), ...line(17, 16, 23, 16),
+                                       ...line(6, 16, 6, 16), ...line(24, 16, 24, 16)]), true, T4_W, T4_H));
+  // ---- water: the canal right across the town, and the market lagoon fed by a side canal
+  const lagoon = rect(3, 22, 10, 27);
+  const canal = cells(line(0, 8, 31, 8));
+  put(stripLayout('pond', lagoon, canal, true, T4_W, T4_H));
+  ground[8][15] = 'river_bridge_ns';
+  put(autotile('plaza', rect(9, 18, 21, 21), false, T4_W, T4_H));       // the market square
+
+  // ---- tall grass: rice paddies north of the canal, rough grass south of the town
+  const grass = [[rect(2, 1, 11, 6), 'route_g', 'tall_rice'], [rect(19, 1, 29, 6), 'route_g', 'tall_rice'],
+                 [rect(18, 24, 29, 31), 'route_h'], [rect(2, 29, 12, 31), 'route_h', 'tall_rice_gold']];
+  for (const [set, area, tile] of grass) {
+    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = tile || 'tall_grass'; m.tall.set(k, area); }
+  }
+  blockTerrain(m, block);
+  placeBuilding(B, 'healing_center', 'heal2');
+  placeBuilding(B, 'gym2', 'gym2');
+
+  const object = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
+  // palms and bamboo along both sides, fence along the bottom
+  const treeKinds = ['coconut_palm', 'banana_tree', 'coconut_palm', 'bamboo', 'tree_mango', 'coconut_palm'];
+  const pick = () => treeKinds[Math.floor(rng() * treeKinds.length)];
+  for (let r = 2; r < T4_H; r += 2) if (r < 7 || r > 9) { object(pick(), 0, r); object(pick(), 30, r); }
+  for (let r = 0; r < T4_H; r++) if (r !== 8) { block(0, r); block(1, r); block(30, r); block(31, r); }
+  for (let c = 2; c < 30; c++) if (c < 14 || c > 16) object('fence_h', c, 33);
+
+  // the market: stalls, jars and baskets, lanterns, a sala to rest in
+  object('food_cart', 10, 19, { id: 'food_cart' }); object('food_cart', 18, 21, { id: 'food_cart' });
+  object('baskets', 12, 18); object('water_jar', 13, 18); object('baskets', 20, 18);
+  object('lamp_post', 9, 21); object('lamp_post', 21, 18);
+  object('sala', 18, 19, { id: 'sala' });
+  object('bench', 11, 21);
+  // on the water: long-tail boats and lotus
+  object('boat', 4, 23, { flat: true }); object('boat', 7, 25, { flat: true });
+  object('boat', 20, 8, { flat: true }); object('boat', 4, 8, { flat: true });
+  object('lotus', 9, 23, { flat: true }); object('lotus', 4, 26, { flat: true }); object('lotus', 26, 8, { flat: true });
+  object('spirit_house', 2, 18, { id: 'spirit_house' }); object('haystack', 12, 7); object('haystack', 18, 7);
+  object('ox_cart', 26, 21); object('tree_mango', 12, 24); object('bamboo', 2, 20);
+  object('signpost_thai', 17, 2, { id: 'sign_t4_top' });
+  object('signpost_thai', 13, 17, { id: 'sign_t4_market' });
+  object('signpost_thai', 13, 31, { id: 'sign_t4_end' });
+  object('crate', 28, 23, { id: 't4_crate_a' });
+  object('crate', 2, 32, { id: 't4_crate_b' });
+
+  m.things.sort((a, b) => a.sortY - b.sortY);
+  m.npcs.push({ id: 'vendor', sheet: 'chars/npc_shopkeeper', c: 11, r: 20, dir: 'down' });
+  m.exits.push({ side: 'up', c0: T4_ENTRY, c1: T4_ENTRY + 2, to: { map: 'route2', dc: 22 - T4_ENTRY, r: R2_H - 1 } });
+  m.exits.push({ side: 'down', c0: 14, c1: 16, to: null, need: 'badge2',
+                 lockedText: 'ทางไปด่าน 5 ถูกปิดไว้: "ผู้ที่จะผ่านต้องมีเหรียญวารี"\nไปท้าประลองที่ยิมวารีทางตะวันออกของตลาดก่อน',
+                 soonText: 'เหรียญวารีส่องประกาย ทางไปด่าน 5 เปิดแล้ว!\nแต่ด่าน 5 ยังอยู่ระหว่างสร้าง จะตามมาในเวอร์ชันถัดไป' });
   return m;
 }
 
 function buildMaps() {
-  const maps = { village: buildVillage(), route1: buildRoute1(), route2: buildRoute2() };
+  const maps = { village: buildVillage(), route1: buildRoute1(), route2: buildRoute2(), town: buildTown() };
   for (const id of Object.keys(ROOMS)) maps[id] = buildRoom(id);
   return maps;
 }

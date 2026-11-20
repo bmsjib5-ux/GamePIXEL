@@ -82,6 +82,16 @@ const MOVES = {
   shadow_swoop:   { name: 'โฉบเงาราตรี', type: 'ghost', power: 80 },
   sunrise_peck:   { name: 'จิกรับอรุณ', type: 'normal', power: 80 },
   quake_stomp:    { name: 'กระทืบโคลนสะเทือน', type: 'normal', power: 80 },
+  // moves of the floating-market monsters (stage 4)
+  fin_whip:      { name: 'ครีบฟาด',         type: 'water',    power: 50 },
+  rainbow_fin:   { name: 'ครีบรุ้งพิฆาต',    type: 'water',    power: 75 },
+  candle_wisp:   { name: 'เปลวเทียนหลอน',   type: 'ghost',    power: 50 },
+  river_drift:   { name: 'ลอยกระทงอาถรรพ์', type: 'ghost',    power: 75 },
+  glow_flash:    { name: 'แสงหิ่งห้อย',      type: 'electric', power: 50 },
+  swarm_bolt:    { name: 'ฝูงหิ่งห้อยช็อต',   type: 'electric', power: 75 },
+  vine_tangle:   { name: 'รากพันขา',        type: 'leaf',     power: 50 },
+  bloom_raft:    { name: 'แพดอกผักตบ',      type: 'leaf',     power: 75 },
+  dive_flame:    { name: 'โฉบเพลิง',         type: 'fire',     power: 75 },
   // strongest move of each final evolution
   inferno_horn:   { name: 'เขาเพลิงผลาญ',    type: 'fire',     power: 85 },
   tidal_spiral:   { name: 'เกลียวคลื่นยักษ์', type: 'water',    power: 85 },
@@ -165,6 +175,23 @@ const SPECIES = {
               hp: 62, atk: 55, def: 54, spd: 30,
               moves: [[1, 'tackle'], [1, 'horn_charge'], [8, 'mud_stomp']],
               evolve: { level: EVO_LEVEL_ROUTE, to: 'buffalo2' } },
+  // Monsters of the floating market (stage 4). They appear from level 14, so they
+  // already know their middle move when met.
+  betta:      { name: 'ปลากัดรุ้ง',      type: 'water',    img: 'wild_water_betta',
+                hp: 50, atk: 62, def: 46, spd: 66,
+                moves: [[1, 'tackle'], [1, 'fin_whip'], [12, 'bubble'], [17, 'rainbow_fin']] },
+  krathong:   { name: 'กระทงผี',        type: 'ghost',    img: 'wild_ghost_krathong',
+                hp: 52, atk: 58, def: 54, spd: 56,
+                moves: [[1, 'tackle'], [1, 'candle_wisp'], [12, 'ember'], [17, 'river_drift']] },
+  firefly:    { name: 'หิ่งห้อยสายฟ้า',  type: 'electric', img: 'wild_electric_firefly',
+                hp: 46, atk: 60, def: 44, spd: 72,
+                moves: [[1, 'tackle'], [1, 'glow_flash'], [12, 'wing_slap'], [17, 'swarm_bolt']] },
+  hyacinth:   { name: 'ผักตบชวา',       type: 'leaf',     img: 'wild_leaf_hyacinth',
+                hp: 64, atk: 50, def: 62, spd: 40,
+                moves: [[1, 'tackle'], [1, 'vine_tangle'], [12, 'bubble'], [17, 'bloom_raft']] },
+  kingfisher: { name: 'กระเต็นเพลิง',    type: 'fire',     img: 'wild_fire_kingfisher',
+                hp: 48, atk: 66, def: 42, spd: 70,
+                moves: [[1, 'peck'], [1, 'ember'], [12, 'wing_slap'], [17, 'dive_flame']] },
   // Evolved forms of the second set (stage 2). Each of them evolves once, at EVO_LEVEL_ROUTE.
   // Stats are the base form's x1.35.
   frog2: { name: 'คางคกประทีป', type: 'fire', img: 'wild_fire_frog_evo1',
@@ -272,6 +299,15 @@ const ENCOUNTERS = {
                                        ['duck2', 9], ['crab2', 9], ['narwhal2', 8]] },
   route_f: { levels: [12, 14], table: [['buffalo', 16], ['snail', 14], ['durian', 16], ['kite2', 10], ['gecko2', 10],
                                        ['rooster2', 10], ['bat2', 8], ['lamb2', 8], ['pangolin2', 8]] },
+  // Bang Bua town (stage 4)
+  // the five floating-market monsters make up about half of what lives here
+  route_g: { levels: [14, 16], table: [['betta', 16], ['hyacinth', 16], ['firefly', 14], ['kingfisher', 12],
+                                       ['krathong', 8], ['duck2', 8], ['crab2', 8], ['frog2', 6], ['bat2', 6],
+                                       ['gecko2', 6], ['kite2', 6], ['moth2', 6], ['beetle2', 6]] },
+  route_h: { levels: [16, 18], table: [['krathong', 14], ['kingfisher', 12], ['firefly', 12], ['betta', 8],
+                                       ['hyacinth', 8], ['buffalo2', 10], ['durian2', 10], ['snail2', 8],
+                                       ['rooster2', 8], ['tortoise2', 8], ['narwhal2', 6], ['lamb2', 5],
+                                       ['pangolin2', 5], ['beetle3', 3], ['moth3', 3]] },
 };
 // the rival's team for the rematch at the end of Route 1: [species, level]; "starter2" is
 // the first evolution of the starter he took
@@ -284,6 +320,14 @@ const GYM = {
   kid:    { name: 'นักสำรวจน้องแก้ว', flag: 'gym2',   team: [['tortoise', 10], ['crab', 10]] },
   leader: { name: 'หัวหน้ายิมศิลา',   flag: 'badge1', team: [['snail', 11], ['buffalo', 12], ['tortoise2', 13]] },
 };
+// The Water Gym in Bang Bua (stage 4). Two trainers stand on the bridges over the canals
+// in its hall; beating the leader gives the second badge. team: [species, level]
+const GYM2 = {
+  swimmer: { name: 'นักว่ายน้ำน้องปลา', flag: 'g2a',    team: [['duck2', 15], ['crab2', 16]] },
+  rower:   { name: 'ฝีพายลุงเรือ',      flag: 'g2b',    team: [['betta', 16], ['crab2', 16], ['duck2', 17]] },
+  leader:  { name: 'หัวหน้ายิมวารี',     flag: 'badge2', team: [['betta', 18], ['crab2', 18], ['duck2', 19], ['narwhal3', 20]] },
+};
+
 // Trainers along Route 2 (stage 3): each fights once, when spoken to.
 const ROUTE2_TRAINERS = {
   hiker: { name: 'นักเดินป่าผาหิน', flag: 'r2t1', team: [['snail2', 12], ['buffalo', 13]] },
