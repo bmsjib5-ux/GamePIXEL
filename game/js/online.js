@@ -115,6 +115,20 @@ const ONLINE = (() => {
     },
     flush,
     async leaderboard(by) { return call('GET', '/api/leaderboard?by=' + by); },
+    // trading
+    tradeCreate: (mon) => call('POST', '/api/trades', { mon }),
+    tradeList: () => call('GET', '/api/trades'),
+    tradePeek: (code) => call('GET', '/api/trades/' + encodeURIComponent(code)),
+    tradeAccept: (code, mon) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/accept', { mon }),
+    tradeCancel: (code) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/cancel'),
+    tradeClaim: (code) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/claim'),
+    // trading
+    tradeCreate: (mon) => call('POST', '/api/trades', { mon }),
+    tradeList: () => call('GET', '/api/trades'),
+    tradePeek: (code) => call('GET', '/api/trades/' + encodeURIComponent(code)),
+    tradeAccept: (code, mon) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/accept', { mon }),
+    tradeCancel: (code) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/cancel'),
+    tradeClaim: (code) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/claim'),
   };
   return api;
 })();

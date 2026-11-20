@@ -1132,13 +1132,14 @@
       }
       const opts = fromTitle
         ? ['โหลดเซฟจากคลาวด์', 'อัปโหลดเซฟในเครื่องขึ้นคลาวด์', 'ตารางอันดับ', 'ออกจากระบบ', 'กลับ']
-        : ['บันทึกขึ้นคลาวด์ตอนนี้', 'ตารางอันดับ', 'ออกจากระบบ', 'กลับ'];
+        : ['บันทึกขึ้นคลาวด์ตอนนี้', 'แลกเปลี่ยนมอนสเตอร์', 'ตารางอันดับ', 'ออกจากระบบ', 'กลับ'];
       const i = await choose(opts, { x: 120, y: 70, w: 240, rowH: 26, cancellable: true,
         title: 'ออนไลน์ : ' + ONLINE.username,
         footer: ONLINE.linked ? 'บันทึกขึ้นคลาวด์อัตโนมัติ : เปิด' : 'ยังไม่ได้เชื่อมเซฟกับบัญชี' });
       const what = i < 0 ? 'back' : opts[i];
       if (what === 'กลับ' || what === 'back') return null;
       if (what === 'ตารางอันดับ') { await leaderboardScreen(); continue; }
+      if (what === 'แลกเปลี่ยนมอนสเตอร์') { await tradeMenu(); continue; }
       if (what === 'ออกจากระบบ') {
         if (!(await yesNo('ออกจากระบบ ' + ONLINE.username + ' ใช่ไหม?'))) continue;
         await online(() => ONLINE.logout());
@@ -1167,6 +1168,106 @@
     }
   }
   const save0 = () => save();
+
+  // ---- trading monsters online, with a code: put one up (it waits on the server), a friend
+  // enters the code and gives one back, then the first player collects it.
+  const monText = (m) => m.nick ? m.nick + ' (' + SPECIES[m.sp].name + ')' : SPECIES[m.sp].name;
+  // only monsters this version of the game knows can arrive
+  const knownMon = (m) => !!(m && SPECIES[m.sp] && Array.isArray(m.moves) && m.moves.every((id) => MOVES[id]));
+  function receiveMon(m) {
+    const mon = { sp: m.sp, level: m.level, exp: m.exp, hp: 0, moves: m.moves.slice() };
+    if (m.nick) mon.nick = m.nick;
+    mon.hp = stats(mon).hp;
+    noteCaught(mon.sp);
+    if (G.party.length < PARTY_MAX) { G.party.push(mon); return 'ทีม'; }
+    G.lab.push(mon); return 'กล่องฝากมอนสเตอร์';
+  }
+  // every monster the player owns: the team first, then the box
+  const allMine = () => G.party.map((m) => ({ m, where: 'party' })).concat(G.lab.map((m) => ({ m, where: 'lab' })));
+  function takeMine(entry) {
+    const list = entry.where === 'party' ? G.party : G.lab;
+    list.splice(list.indexOf(entry.m), 1);
+  }
+  async function pickMineToTrade(title) {
+    const all = allMine();
+    const k = await pickFromList(all.map((e) => e.m), title);
+    if (k < 0) return null;
+    const e = all[k];
+    if (e.where === 'party' && G.party.length <= 1) { await say('ต้องเหลือมอนสเตอร์ในทีมอย่างน้อย 1 ตัว'); return null; }
+    return e;
+  }
+  async function afterTrade() {
+    save();
+    if (ONLINE.linked) { try { await ONLINE.uploadNow(G); } catch (e) { /* the regular upload will retry */ } }
+  }
+  async function collectTrades(list) {
+    for (const t of list.filter((x) => x.status === 'accepted')) {
+      const got = await online(() => ONLINE.tradeClaim(t.code));
+      if (!got) continue;
+      if (!knownMon(got.mon)) { await say('ได้รับมอนสเตอร์ที่เกมเวอร์ชันนี้ยังไม่รู้จัก\nรีเฟรชหน้าเกมแล้วลองใหม่'); continue; }
+      const where = receiveMon(got.mon);
+      AUDIO.sfx('caught');
+      await say((t.partner || 'เพื่อน') + ' รับข้อเสนอ ' + t.code + ' แล้ว!\nได้รับ' + monText(got.mon) + ' Lv.' + got.mon.level + ' (ไปอยู่ใน' + where + ')');
+      await afterTrade();
+    }
+  }
+  async function tradeMenu() {
+    for (;;) {
+      const data = await online(() => ONLINE.tradeList());
+      if (!data) return;
+      if (data.trades.some((t) => t.status === 'accepted')) { await collectTrades(data.trades); continue; }
+      const open = data.trades.filter((t) => t.status === 'open');
+      const i = await choose(['เสนอแลกมอนสเตอร์ (สร้างรหัส)', 'ใส่รหัสแลกจากเพื่อน', 'ข้อเสนอของฉัน (' + open.length + ')', 'กลับ'],
+        { x: 110, y: 70, w: 260, rowH: 28, cancellable: true, title: 'แลกเปลี่ยนมอนสเตอร์',
+          footer: 'มอนสเตอร์ที่เสนอจะฝากไว้บนเซิร์ฟเวอร์จนกว่าจะมีคนรับ' });
+      if (i < 0 || i === 3) return;
+
+      if (i === 0) {                                   // put one up for trade
+        const e = await pickMineToTrade('เลือกตัวที่จะนำไปแลก');
+        if (!e) continue;
+        if (!(await confirmWithCard(e.m, 'นำไปแลก'))) continue;
+        const r = await online(() => ONLINE.tradeCreate(e.m));
+        if (!r) continue;
+        takeMine(e);
+        await afterTrade();
+        AUDIO.sfx('confirm');
+        await say('สร้างข้อเสนอแล้ว!  รหัสแลกเปลี่ยน : ' + r.code + '\nบอกรหัสนี้ให้เพื่อน แล้วรอให้เพื่อนเลือกตัวมาแลก');
+        await say('รหัส ' + r.code + ' ดูซ้ำได้ที่ "ข้อเสนอของฉัน"\nเปลี่ยนใจก่อนมีคนรับ ยกเลิกแล้วรับ' + nm(e.m) + 'คืนได้');
+      } else if (i === 1) {                            // take a friend's offer
+        const code = await askText('ใส่รหัสแลกเปลี่ยน', '', 8, 'รหัส 6 ตัวที่เพื่อนบอก');
+        if (!code) continue;
+        const t = await online(() => ONLINE.tradePeek(code.toUpperCase().replace(/\s/g, '')));
+        if (!t) continue;
+        if (t.mine) { await say('นี่คือข้อเสนอของคุณเอง รับเองไม่ได้นะ'); continue; }
+        if (!knownMon(t.mon)) { await say('มอนสเตอร์ตัวนี้มาจากเกมเวอร์ชันใหม่กว่า\nรีเฟรชหน้าเกมแล้วลองใหม่'); continue; }
+        await say('ข้อเสนอ ' + t.code + ' : ' + monText(t.mon) + ' Lv.' + t.mon.level);
+        if (!(await confirmWithCard(t.mon, 'เลือกตัวที่จะให้แลก'))) continue;
+        const e = await pickMineToTrade('เลือกตัวที่จะให้แลกกับ' + monText(t.mon));
+        if (!e) continue;
+        if (!(await confirmWithCard(e.m, 'ให้ตัวนี้แลก'))) continue;
+        const r = await online(() => ONLINE.tradeAccept(t.code, e.m));
+        if (!r) continue;
+        takeMine(e);
+        const where = receiveMon(r.mon);
+        await afterTrade();
+        AUDIO.sfx('caught');
+        await say('แลกสำเร็จ! ส่ง' + nm(e.m) + 'ไปให้เพื่อนแล้ว\nได้รับ' + monText(r.mon) + ' Lv.' + r.mon.level + ' (ไปอยู่ใน' + where + ')');
+      } else {                                         // my open offers
+        if (!open.length) { await say('ยังไม่มีข้อเสนอที่รอคนรับ'); continue; }
+        const k = await choose(open.map((t) => ({ label: 'รหัส ' + t.code, right: knownMon(t.mon) ? monText(t.mon) + ' Lv.' + t.mon.level : '?' }))
+          .concat([{ label: 'กลับ' }]), { x: 60, y: 60, w: 360, rowH: 26, cancellable: true, title: 'ข้อเสนอของฉัน (รอคนรับ)' });
+        if (k < 0 || k === open.length) continue;
+        const t = open[k];
+        if (!(await yesNo('ยกเลิกข้อเสนอ ' + t.code + ' แล้วรับ' + (knownMon(t.mon) ? monText(t.mon) : 'มอนสเตอร์') + 'คืน ใช่ไหม?'))) continue;
+        const r = await online(() => ONLINE.tradeCancel(t.code));
+        if (!r) continue;
+        if (!knownMon(r.mon)) { await say('รับคืนไม่ได้ เกมเวอร์ชันนี้ยังไม่รู้จักมอนสเตอร์ตัวนี้'); continue; }
+        const where = receiveMon(r.mon);
+        await afterTrade();
+        await say('ยกเลิกแล้ว ' + monText(r.mon) + 'กลับมาอยู่ใน' + where);
+      }
+    }
+  }
 
   async function teamScreen() {
     let at = 0;

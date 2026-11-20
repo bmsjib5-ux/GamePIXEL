@@ -8,6 +8,12 @@
 //   GET  /api/save       (auth)                -> {save, savedAt}   (save is null when none)
 //   PUT  /api/save       (auth) {save}         -> {ok, savedAt}
 //   GET  /api/leaderboard?by=progress|caught   -> {rows, me}   (me only when logged in)
+//   POST /api/trades     (auth) {mon}          -> {code}        put a monster up for trade
+//   GET  /api/trades     (auth)                -> {trades}      my offers (open / accepted)
+//   GET  /api/trades/:code (auth)              -> {code, mon, from, status}
+//   POST /api/trades/:code/accept (auth) {mon} -> {mon}         give mine, get theirs
+//   POST /api/trades/:code/cancel (auth)       -> {mon}         my open offer back
+//   POST /api/trades/:code/claim  (auth)       -> {mon}         collect what I was given
 //   GET  /health                               -> ok
 //
 // "auth" means the header  Authorization: Bearer <token>.
@@ -57,7 +63,7 @@ function scoreOf(save) {
 // ------------------------------------------------------------------ storage
 // Both stores offer the same calls.
 function fileStore(file) {
-  let db = { users: [], sessions: [], saves: {} };
+  let db = { users: [], sessions: [], saves: {}, trades: [] };
   try { db = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { /* first run */ }
   const write = () => fs.writeFileSync(file, JSON.stringify(db, null, 1));
   return {
@@ -87,6 +93,36 @@ function fileStore(file) {
       return rows.slice(0, limit);
     },
     async allRanked(by) { return this.leaderboard(by, 1e9); },
+    // trades
+    async tradeByCode(code) { return (db.trades || []).find((t) => t.code === code) || null; },
+    async openTradesOf(userId) { return (db.trades || []).filter((t) => t.owner_id === userId && t.status === 'open').length; },
+    async createTrade(code, userId, mon) {
+      db.trades = db.trades || [];
+      db.trades.push({ code, owner_id: userId, mon, status: 'open', partner_id: null, partner_mon: null,
+                       claimed: false, created_at: new Date().toISOString() });
+      write();
+    },
+    async acceptTrade(code, userId, mon) {          // only if still open and not one's own
+      const t = (db.trades || []).find((x) => x.code === code && x.status === 'open' && x.owner_id !== userId);
+      if (!t) return null;
+      Object.assign(t, { status: 'accepted', partner_id: userId, partner_mon: mon, accepted_at: new Date().toISOString() });
+      write(); return t.mon;
+    },
+    async cancelTrade(code, userId) {
+      const t = (db.trades || []).find((x) => x.code === code && x.status === 'open' && x.owner_id === userId);
+      if (!t) return null;
+      db.trades = db.trades.filter((x) => x !== t); write(); return t.mon;
+    },
+    async claimTrade(code, userId) {
+      const t = (db.trades || []).find((x) => x.code === code && x.status === 'accepted' && x.owner_id === userId && !x.claimed);
+      if (!t) return null;
+      t.claimed = true; write(); return t.partner_mon;
+    },
+    async tradesOf(userId) {
+      return (db.trades || []).filter((t) => t.owner_id === userId && !t.claimed).map((t) => ({
+        code: t.code, mon: t.mon, status: t.status, partner_mon: t.partner_mon,
+        partner: t.partner_id ? (db.users.find((u) => u.id === t.partner_id) || {}).username : null }));
+    },
   };
 }
 function rankOrder(by) {
@@ -118,6 +154,13 @@ function pgStore(url) {
                  user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, data JSONB NOT NULL,
                  stage INT NOT NULL DEFAULT 0, caught INT NOT NULL DEFAULT 0, level INT NOT NULL DEFAULT 0,
                  badges INT NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+      await q(`CREATE TABLE IF NOT EXISTS trades (
+                 code TEXT PRIMARY KEY, owner_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                 mon JSONB NOT NULL, status TEXT NOT NULL DEFAULT 'open',
+                 partner_id INT REFERENCES users(id) ON DELETE SET NULL, partner_mon JSONB,
+                 claimed BOOLEAN NOT NULL DEFAULT false,
+                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(), accepted_at TIMESTAMPTZ)`);
+      await q('CREATE INDEX IF NOT EXISTS trades_owner ON trades (owner_id)');
     },
     async userByName(name) {
       const r = await q('SELECT * FROM users WHERE lower(username) = lower($1)', [name]); return r.rows[0] || null;
@@ -151,6 +194,37 @@ function pgStore(url) {
     async allRanked(by) {
       const r = await q(`SELECT s.user_id, s.stage, s.caught, s.level, s.badges, s.updated_at FROM saves s
                          ORDER BY ${order(by)}`);
+      return r.rows;
+    },
+    // trades: each change is one statement, so two players can never take the same offer
+    async tradeByCode(code) {
+      const r = await q('SELECT * FROM trades WHERE code = $1', [code]); return r.rows[0] || null;
+    },
+    async openTradesOf(userId) {
+      const r = await q("SELECT count(*)::int AS n FROM trades WHERE owner_id = $1 AND status = 'open'", [userId]);
+      return r.rows[0].n;
+    },
+    async createTrade(code, userId, mon) {
+      await q('INSERT INTO trades (code, owner_id, mon) VALUES ($1, $2, $3)', [code, userId, mon]);
+    },
+    async acceptTrade(code, userId, mon) {
+      const r = await q(`UPDATE trades SET status = 'accepted', partner_id = $2, partner_mon = $3, accepted_at = now()
+                         WHERE code = $1 AND status = 'open' AND owner_id <> $2 RETURNING mon`, [code, userId, mon]);
+      return r.rows[0] ? r.rows[0].mon : null;
+    },
+    async cancelTrade(code, userId) {
+      const r = await q("DELETE FROM trades WHERE code = $1 AND status = 'open' AND owner_id = $2 RETURNING mon", [code, userId]);
+      return r.rows[0] ? r.rows[0].mon : null;
+    },
+    async claimTrade(code, userId) {
+      const r = await q(`UPDATE trades SET claimed = true
+                         WHERE code = $1 AND status = 'accepted' AND owner_id = $2 AND NOT claimed RETURNING partner_mon`, [code, userId]);
+      return r.rows[0] ? r.rows[0].partner_mon : null;
+    },
+    async tradesOf(userId) {
+      const r = await q(`SELECT t.code, t.mon, t.status, t.partner_mon, u.username AS partner
+                         FROM trades t LEFT JOIN users u ON u.id = t.partner_id
+                         WHERE t.owner_id = $1 AND NOT t.claimed ORDER BY t.created_at`, [userId]);
       return r.rows;
     },
   };
@@ -203,6 +277,21 @@ function tooManyAttempts(ip) {
   return list.length >= 10;
 }
 const noteAttempt = (ip) => attempts.get(ip).push(Date.now());
+
+// trading: codes people can read out (no 0/O, 1/I), and only the fields a monster has
+const MAX_OPEN_TRADES = 3;
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const newCode = () => Array.from(crypto.randomBytes(6), (b) => CODE_CHARS[b % CODE_CHARS.length]).join('');
+function cleanMon(m) {
+  if (!m || typeof m !== 'object' || typeof m.sp !== 'string' || !/^[a-z0-9_]{2,24}$/.test(m.sp)) return null;
+  const level = Math.floor(Number(m.level)), exp = Math.floor(Number(m.exp)), hp = Math.floor(Number(m.hp));
+  if (!(level >= 1 && level <= 100) || !(exp >= 0) || !(hp >= 0)) return null;
+  if (!Array.isArray(m.moves) || m.moves.length < 1 || m.moves.length > 4 ||
+      !m.moves.every((x) => typeof x === 'string' && /^[a-z0-9_]{2,24}$/.test(x))) return null;
+  const out = { sp: m.sp, level, exp, hp, moves: m.moves.slice() };
+  if (typeof m.nick === 'string' && m.nick.trim()) out.nick = m.nick.trim().slice(0, 10);
+  return out;
+}
 
 // usernames: 3-16 letters (Thai or English), digits or _
 const NAME_OK = /^[A-Za-z0-9_฀-๿]{3,16}$/;
@@ -270,6 +359,50 @@ async function handle(req, res) {
     }
     const savedAt = await store.putSave(user.id, save, scoreOf(save));
     return send(res, 200, { ok: true, savedAt });
+  }
+  // ---- trading monsters
+  if (route === 'POST /api/trades') {
+    const { mon } = await readBody(req);
+    const clean = cleanMon(mon);
+    if (!clean) return fail(res, 400, 'ข้อมูลมอนสเตอร์ไม่ถูกต้อง');
+    if (await store.openTradesOf(user.id) >= MAX_OPEN_TRADES) {
+      return fail(res, 409, 'มีข้อเสนอที่ยังไม่มีคนรับอยู่ ' + MAX_OPEN_TRADES + ' รายการแล้ว ยกเลิกหรือรอให้มีคนรับก่อน');
+    }
+    let code = newCode();
+    for (let i = 0; i < 5 && (await store.tradeByCode(code)); i++) code = newCode();
+    await store.createTrade(code, user.id, clean);
+    return send(res, 200, { code });
+  }
+  if (route === 'GET /api/trades') return send(res, 200, { trades: await store.tradesOf(user.id) });
+  const tm = /^\/api\/trades\/([A-Za-z0-9]{4,8})(?:\/(accept|cancel|claim))?$/.exec(url.pathname);
+  if (tm) {
+    const code = tm[1].toUpperCase(), act = tm[2];
+    if (req.method === 'GET' && !act) {
+      const t = await store.tradeByCode(code);
+      if (!t || t.status !== 'open') return fail(res, 404, 'ไม่พบข้อเสนอนี้ หรือมีคนรับไปแล้ว');
+      const owner = Number(t.owner_id) === Number(user.id);
+      return send(res, 200, { code, mon: t.mon, mine: owner, status: t.status });
+    }
+    if (req.method === 'POST' && act === 'accept') {
+      const { mon } = await readBody(req);
+      const clean = cleanMon(mon);
+      if (!clean) return fail(res, 400, 'ข้อมูลมอนสเตอร์ไม่ถูกต้อง');
+      const t = await store.tradeByCode(code);
+      if (t && Number(t.owner_id) === Number(user.id)) return fail(res, 409, 'รับข้อเสนอของตัวเองไม่ได้');
+      const got = await store.acceptTrade(code, user.id, clean);
+      if (!got) return fail(res, 404, 'ไม่พบข้อเสนอนี้ หรือมีคนรับไปแล้ว');
+      return send(res, 200, { mon: got });
+    }
+    if (req.method === 'POST' && act === 'cancel') {
+      const got = await store.cancelTrade(code, user.id);
+      if (!got) return fail(res, 404, 'ยกเลิกไม่ได้ (อาจมีคนรับไปแล้ว)');
+      return send(res, 200, { mon: got });
+    }
+    if (req.method === 'POST' && act === 'claim') {
+      const got = await store.claimTrade(code, user.id);
+      if (!got) return fail(res, 404, 'ไม่มีมอนสเตอร์ให้รับจากข้อเสนอนี้');
+      return send(res, 200, { mon: got });
+    }
   }
   return fail(res, 404, 'ไม่พบ');
 }
