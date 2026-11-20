@@ -359,6 +359,7 @@ function buildRoute1() {
 
   m.things.sort((a, b) => a.sortY - b.sortY);
   m.npcs.push({ id: 'rival2', sheet: 'chars/npc_rival', c: 20, r: 31, dir: 'up' });
+  m.npcs.push({ id: 'vendor', sheet: 'chars/npc_shopkeeper', c: 7, r: 27, dir: 'right' });   // travelling merchant
   m.exits.push({ side: 'up', c0: 13, c1: 15, to: { map: 'village', dc: 1, r: MAP_H - 1 } });
   // the road south leads to Route 2 (stage 3) and needs the gym's badge
   m.exits.push({ side: 'down', c0: 19, c1: 21, to: { map: 'route2', dc: R2_ENTRY - 19, r: 0 }, need: 'badge1',
@@ -430,6 +431,7 @@ function buildRoute2() {
   m.npcs.push({ id: 'r2_hiker', sheet: 'chars/npc_gym_hiker', c: 9, r: 10, dir: 'down' });
   m.npcs.push({ id: 'r2_kid', sheet: 'chars/npc_gym_kid', c: 16, r: 25, dir: 'left' });
   m.npcs.push({ id: 'rival3', sheet: 'chars/npc_rival', c: 23, r: 32, dir: 'up' });
+  m.npcs.push({ id: 'vendor', sheet: 'chars/npc_shopkeeper', c: 8, r: 28, dir: 'right' });   // travelling merchant
   m.exits.push({ side: 'up', c0: R2_ENTRY, c1: R2_ENTRY + 2, to: { map: 'route1', dc: 19 - R2_ENTRY, r: R1_H - 1 } });
   // the road on to stage 4 opens after the final duel with the rival; stage 4 is not built yet
   m.exits.push({ side: 'down', c0: 22, c1: 24, to: null, need: 'stage3',

@@ -143,8 +143,15 @@
 
   function newGame() {
     G = { player: { ...START_SPOT }, party: [], lab: [], bag: { capsule: 0, potion: 0 },
-          caught: [], flags: {}, steps: 0 };
+          caught: [], flags: {}, steps: 0, gold: GOLD_START };
   }
+  // fills in what older saves did not have yet
+  function upgradeSave() {
+    if (typeof G.gold !== 'number') G.gold = GOLD_START;
+    for (const id of Object.keys(ITEMS)) if (typeof G.bag[id] !== 'number') G.bag[id] = 0;
+  }
+  const itemCount = (kind) => Object.keys(ITEMS).filter((id) => ITEMS[id].kind === kind)
+    .reduce((n, id) => n + G.bag[id], 0);
   function save() {
     if (!G || !pl) return;
     G.player = { map: MAP.id, c: pl.c, r: pl.r, dir: pl.dir };
@@ -598,15 +605,8 @@
       save();
     },
 
-    async shopkeeper() {
-      if (!G.flags.starter) { await say('ร้านต้นกล้ายินดีต้อนรับ!\nพอเธอมีมอนสเตอร์แล้วแวะมารับของแถมมือใหม่ได้นะ'); return; }
-      const cap = Math.max(0, 5 - G.bag.capsule), pot = Math.max(0, 3 - G.bag.potion);
-      if (!cap && !pot) { await say('ของในกระเป๋าเธอยังเต็มอยู่เลย ใช้หมดแล้วค่อยกลับมาใหม่นะ'); return; }
-      G.bag.capsule += cap; G.bag.potion += pot;
-      await say('ร้านยังไม่เปิดขายจริงจัง แต่มือใหม่รับของแถมไปได้เลย');
-      await say('ได้รับ' + (cap ? 'แคปซูล ' + cap + ' ลูก' : '') + (cap && pot ? ' และ' : '') + (pot ? 'ยา ' + pot + ' ขวด' : '') + '!');
-      save();
-    },
+    async shopkeeper() { await shop('ร้านต้นกล้ายินดีต้อนรับ! วันนี้รับอะไรดีจ๊ะ?'); },
+    async vendor() { await shop('พ่อค้าเร่มาแล้วจ้า! ของครบเหมือนร้านในหมู่บ้าน ราคาเดียวกันเลย'); },
 
     async rival() {
       if (!G.flags.starter) { await say('นายยังไม่มีมอนสเตอร์เหรอ?\nไปหาศาสตราจารย์สนที่ลานกลางหมู่บ้านก่อนสิ'); return; }
@@ -789,6 +789,33 @@
     },
   };
 
+  // Buying: pick an item, then how many. Gold is shown at the bottom of the list.
+  async function shop(hello) {
+    await say(hello);
+    let at = 0;
+    for (;;) {
+      const opts = SHOP_STOCK.map((id) => ({ label: ITEMS[id].name, right: ITEMS[id].price + ' ทอง',
+        sub: ITEMS[id].desc + '  (มีอยู่ ' + G.bag[id] + ')' }));
+      const i = await choose(opts, { x: 40, y: 20, w: 400, rowH: 34, cancellable: true, start: at,
+        title: 'ร้านค้า  เลือกของที่จะซื้อ', footer: 'เหรียญทองของคุณ : ' + G.gold + ' ทอง' });
+      if (i < 0) break;
+      at = i;
+      const id = SHOP_STOCK[i], it = ITEMS[id];
+      if (G.gold < it.price) { await say('เหรียญทองไม่พอ... ' + it.name + 'ราคา ' + it.price + ' ทอง\nแต่คุณมี ' + G.gold + ' ทอง'); continue; }
+      const amounts = [1, 5, 10];
+      const q = await choose(amounts.map((n) => ({ label: n + ' ชิ้น', right: n * it.price + ' ทอง',
+        disabled: n * it.price > G.gold })), { x: 150, y: 120, w: 180, rowH: 28, cancellable: true,
+        title: 'ซื้อ' + it.name + 'กี่ชิ้น?' });
+      if (q < 0 || amounts[q] * it.price > G.gold) continue;
+      const n = amounts[q];
+      G.gold -= n * it.price;
+      G.bag[id] += n;
+      await say('ซื้อ' + it.name + ' ' + n + ' ชิ้น จ่ายไป ' + n * it.price + ' ทอง\nเหลือเหรียญทอง ' + G.gold + ' ทอง');
+    }
+    await say('ขอบคุณที่อุดหนุนนะ แวะมาใหม่ล่ะ!');
+    save();
+  }
+
   // A trainer who fights once. Gym trainers block the way and step aside for good once
   // beaten (their map entry has a "moved" spot); trainers on a route just stay where they are.
   async function gymTrainer(g, npcId, hello, beaten, later) {
@@ -818,8 +845,8 @@
       const i = await choose(opts, {
         x: 50, y: 24, w: 380, rowH: 30, cancellable: true, start: at,
         title: G.party.length ? 'ทีมมอนสเตอร์  (เลือกเพื่อดูข้อมูล)' : 'ยังไม่มีมอนสเตอร์ในทีม',
-        footer: 'แคปซูล ' + G.bag.capsule + '   ยา ' + G.bag.potion + '   จับได้ ' + goalCaught().length + '/6 ชนิด'
-          + '   เหรียญ ' + (G.flags.badge1 ? 1 : 0) });
+        footer: 'ทอง ' + G.gold + '   แคปซูล ' + itemCount('ball') + '   ยา ' + itemCount('heal')
+          + '   จับได้ ' + goalCaught().length + '/6   เหรียญตรา ' + (G.flags.badge1 ? 1 : 0) });
       if (i < 0) break;
       at = i;
       if (i === G.party.length) {          // the type table
@@ -1030,6 +1057,17 @@
       if (bt.me.hp <= 0 && !(await afterMyFaint())) result = 'lose';
     }
 
+    // Which capsule or potion to use. With only one grade in the bag it is used straight
+    // away; with two the player picks one (or backs out: null).
+    async function pickItem(kind) {
+      const have = Object.keys(ITEMS).filter((id) => ITEMS[id].kind === kind && G.bag[id] > 0);
+      if (!have.length) { await say(kind === 'ball' ? 'แคปซูลหมดแล้ว!' : 'ยาหมดแล้ว!'); return null; }
+      if (have.length === 1) return have[0];
+      const i = await choose(have.map((id) => ({ label: ITEMS[id].name, right: 'x' + G.bag[id] })),
+        { x: 262, y: 236, w: 214, cols: 1, rowH: 30, cancellable: true });
+      return i < 0 ? null : have[i];
+    }
+
     // The legendary monster cannot be hurt or caught yet. It watches for three turns (or until
     // the player backs away), restores the whole party, and leaves.
     async function legendLoop() {
@@ -1039,8 +1077,8 @@
       while (turns < 3) {
         ui.prompt = nm(bt.me) + 'จะทำอะไรดี?';
         const act = await choose([
-          'ต่อสู้', { label: 'แคปซูล', right: 'x' + G.bag.capsule },
-          { label: 'ยา', right: 'x' + G.bag.potion }, 'หนี'], { x: 262, y: 236, w: 214, cols: 2, rowH: 33, start: bt.lastAct || 0 });
+          'ต่อสู้', { label: 'แคปซูล', right: 'x' + itemCount('ball') },
+          { label: 'ยา', right: 'x' + itemCount('heal') }, 'หนี'], { x: 262, y: 236, w: 214, cols: 2, rowH: 33, start: bt.lastAct || 0 });
         bt.lastAct = act;
         ui.prompt = null;
         if (act === 0) {
@@ -1059,8 +1097,9 @@
           bt.pop = null;
           await say('พลังห่างชั้นเกินไป... การโจมตีไม่ระคายผิว' + name + 'เลย');
         } else if (act === 1) {
-          if (G.bag.capsule <= 0) { await say('แคปซูลหมดแล้ว!'); continue; }
-          await say('โยนแคปซูลออกไป!');
+          const ball = await pickItem('ball');
+          if (!ball) continue;
+          await say('โยน' + ITEMS[ball].name + 'ออกไป!');
           const from = { x: SPOT.me.x + 30, y: SPOT.me.y - 90 }, to = { x: SPOT.foe.x, y: SPOT.foe.y - 70 };
           bt.capsule = { x: from.x, y: from.y };
           await tween(420, (t) => { bt.capsule.x = from.x + (to.x - from.x) * t; bt.capsule.y = from.y + (to.y - from.y) * t - Math.sin(t * Math.PI) * 60; });
@@ -1069,13 +1108,14 @@
           bt.capsule = null;
           await say('แคปซูลกระเด็นกลับมาอยู่ในมือ!\n' + name + 'ยังไม่อาจถูกจับได้ในตอนนี้');
         } else if (act === 2) {
-          if (G.bag.potion <= 0) { await say('ยาหมดแล้ว!'); continue; }
           const max = stats(bt.me).hp;
-          if (bt.me.hp >= max) { await say(nm(bt.me) + 'ยังแข็งแรงเต็มที่อยู่'); continue; }
-          G.bag.potion--;
+          if (itemCount('heal') && bt.me.hp >= max) { await say(nm(bt.me) + 'ยังแข็งแรงเต็มที่อยู่'); continue; }
+          const med = await pickItem('heal');
+          if (!med) continue;
+          G.bag[med]--;
           const before = bt.me.hp;
-          bt.me.hp = Math.min(max, bt.me.hp + 20);
-          await say('ใช้ยากับ' + nm(bt.me));
+          bt.me.hp = Math.min(max, bt.me.hp + ITEMS[med].heal);
+          await say('ใช้' + ITEMS[med].name + 'กับ' + nm(bt.me));
           await tween(350, (t) => { bt.hp.me = before + (bt.me.hp - before) * t; });
         } else {
           await say('คุณค่อย ๆ ถอยออกมาอย่างนอบน้อม...');
@@ -1101,8 +1141,8 @@
     while (!result) {
       ui.prompt = nm(bt.me) + 'จะทำอะไรดี?';
       const act = await choose([
-        'ต่อสู้', { label: 'แคปซูล', right: 'x' + G.bag.capsule },
-        { label: 'ยา', right: 'x' + G.bag.potion }, 'หนี'], { x: 262, y: 236, w: 214, cols: 2, rowH: 33, start: bt.lastAct || 0 });
+        'ต่อสู้', { label: 'แคปซูล', right: 'x' + itemCount('ball') },
+        { label: 'ยา', right: 'x' + itemCount('heal') }, 'หนี'], { x: 262, y: 236, w: 214, cols: 2, rowH: 33, start: bt.lastAct || 0 });
       bt.lastAct = act;
       ui.prompt = null;
 
@@ -1120,15 +1160,16 @@
         }
       } else if (act === 1) {
         if (trainer) { await say('ใช้แคปซูลกับมอนสเตอร์ที่มีเจ้าของแล้วไม่ได้!'); continue; }
-        if (G.bag.capsule <= 0) { await say('แคปซูลหมดแล้ว!'); continue; }
-        G.bag.capsule--;
-        await say('โยนแคปซูลออกไป!');
+        const ball = await pickItem('ball');
+        if (!ball) continue;
+        G.bag[ball]--;
+        await say('โยน' + ITEMS[ball].name + 'ออกไป!');
         const from = { x: SPOT.me.x + 30, y: SPOT.me.y - 90 }, to = { x: SPOT.foe.x, y: SPOT.foe.y - 70 };
         bt.capsule = { x: from.x, y: from.y };
         await tween(420, (t) => { bt.capsule.x = from.x + (to.x - from.x) * t; bt.capsule.y = from.y + (to.y - from.y) * t - Math.sin(t * Math.PI) * 60; });
         await tween(220, (t) => { bt.spr.foe.alpha = 1 - t; });
         await tween(260, (t) => { bt.capsule.y = to.y + (SPOT.foe.y - 12 - to.y) * t * t; });
-        const chance = 0.6 * (1 - 0.66 * bt.foe.hp / stats(bt.foe).hp);
+        const chance = Math.min(0.95, 0.6 * ITEMS[ball].rate * (1 - 0.66 * bt.foe.hp / stats(bt.foe).hp));
         const caught = Math.random() < chance;
         const shakes = caught ? 3 : rand(3);
         for (let i = 0; i < shakes; i++) {
@@ -1149,13 +1190,14 @@
           await foeTurn();
         }
       } else if (act === 2) {
-        if (G.bag.potion <= 0) { await say('ยาหมดแล้ว!'); continue; }
         const max = stats(bt.me).hp;
-        if (bt.me.hp >= max) { await say(nm(bt.me) + 'ยังแข็งแรงเต็มที่อยู่'); continue; }
-        G.bag.potion--;
+        if (itemCount('heal') && bt.me.hp >= max) { await say(nm(bt.me) + 'ยังแข็งแรงเต็มที่อยู่'); continue; }
+        const med = await pickItem('heal');
+        if (!med) continue;
+        G.bag[med]--;
         const from = bt.me.hp;
-        bt.me.hp = Math.min(max, bt.me.hp + 20);
-        await say('ใช้ยากับ' + nm(bt.me));
+        bt.me.hp = Math.min(max, bt.me.hp + ITEMS[med].heal);
+        await say('ใช้' + ITEMS[med].name + 'กับ' + nm(bt.me));
         await tween(350, (t) => { bt.hp.me = from + (bt.me.hp - from) * t; });
         await say('พลังชีวิตฟื้นขึ้น ' + (bt.me.hp - from) + ' แต้ม');
         await foeTurn();
@@ -1167,6 +1209,11 @@
     }
 
     if (result === 'win' && trainer) await say('ชนะ' + trainer.name + 'แล้ว!');
+    if (result === 'win') {
+      const gold = trainer ? foes.reduce((n, m) => n + m.level, 0) * GOLD_TRAINER : foes[0].level * GOLD_WILD;
+      G.gold += gold;
+      await say('ได้รับเหรียญทอง ' + gold + ' ทอง!');
+    }
     if (result !== 'lose') for (const m of bt.evolving) await evolve(m);
     if (result === 'lose') await say('ไม่มีมอนสเตอร์ที่สู้ไหวแล้ว...\nคุณรีบพามอนสเตอร์กลับไปที่ศูนย์รักษา');
     await fadeTo(1, 240);
@@ -1578,6 +1625,7 @@
     const i = await choose(saved ? ['เล่นต่อ', 'เริ่มเกมใหม่'] : ['เริ่มเกมใหม่'], { x: 165, y: 258, w: 150, rowH: 22 });
     await fadeTo(1, 250);
     if (saved && i === 0) G = saved; else newGame();
+    upgradeSave();
     startWorld();
     await fadeTo(0, 250);
     if (!G.flags.intro) {

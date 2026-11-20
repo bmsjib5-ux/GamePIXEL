@@ -292,5 +292,22 @@ const ROUTE2_TRAINERS = {
 // The rival's final team at the end of Route 2; "starter3" is the last form of his starter.
 // Beating it clears stage 3.
 const RIVAL_FINAL = [['kite2', 14], ['rooster2', 15], ['starter3', 16]];
+// Items in the bag. kind "ball" catches wild monsters (rate multiplies the catch chance);
+// kind "heal" restores hit points in battle. price is in gold coins.
+const ITEMS = {
+  capsule:     { name: 'แคปซูล',     kind: 'ball', rate: 1,   price: 60,
+                 desc: 'จับมอนสเตอร์ป่า ทำให้อ่อนแรงก่อนจะจับง่ายขึ้น' },
+  capsule_gold:{ name: 'แคปซูลทอง',  kind: 'ball', rate: 1.6, price: 180,
+                 desc: 'จับติดง่ายกว่าแคปซูลธรรมดามาก' },
+  potion:      { name: 'ยา',          kind: 'heal', heal: 20,  price: 50,
+                 desc: 'ฟื้นพลังชีวิต 20 แต้ม' },
+  potion_plus: { name: 'ยาชั้นดี',     kind: 'heal', heal: 60,  price: 150,
+                 desc: 'ฟื้นพลังชีวิต 60 แต้ม' },
+};
+const SHOP_STOCK = ['capsule', 'capsule_gold', 'potion', 'potion_plus'];
+// Gold: a new game starts with GOLD_START; old saves without gold get the same amount.
+// Beating a wild monster pays its level x GOLD_WILD; beating a trainer pays the sum of the
+// team's levels x GOLD_TRAINER.
+const GOLD_START = 300, GOLD_WILD = 12, GOLD_TRAINER = 25;
 const ENCOUNTER_CHANCE = 0.13;
 const PARTY_MAX = 6;
