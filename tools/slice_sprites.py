@@ -332,10 +332,15 @@ for src, names in [
         new_strips.append(lineup(src + "_back.png", [n + "_back" for n in names], 64, 64, "monsters",
                                  src[9:] + "_back_64x64.png", 24, match=names))
 
-# Evolved forms of the first six monsters: stage 1 and stage 2, front and back.
+# Evolved forms, front and back: the first six monsters have stage 1 and stage 2, the ten
+# monsters of the second set have one evolved form (stage 1 only).
 # They get bigger cells than the 64x64 base forms, so a monster visibly grows when it evolves.
 BASE_NAMES = {"starters": ["starter_fire_lamb", "starter_water_narwhal", "starter_leaf_pangolin"],
-              "wild": ["wild_electric_beetle", "wild_rock_tortoise", "wild_ghost_moth"]}
+              "wild": ["wild_electric_beetle", "wild_rock_tortoise", "wild_ghost_moth"],
+              "new_a": ["wild_fire_frog", "wild_water_crab", "wild_water_duck",
+                        "wild_leaf_durian", "wild_leaf_bat"],
+              "new_b": ["wild_electric_gecko", "wild_rock_snail", "wild_ghost_kite",
+                        "wild_normal_rooster", "wild_normal_buffalo"]}
 EVO_CELL = {"evo1": 72, "evo2": 80}
 for group, base in BASE_NAMES.items():
     for stage, cell in EVO_CELL.items():
