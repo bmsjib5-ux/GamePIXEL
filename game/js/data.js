@@ -116,6 +116,14 @@ function moveCooldown(id) {
   return mv.power <= 50 ? 0 : mv.power <= 65 ? 1 : mv.power <= 80 ? 2 : 3;
 }
 
+// Warm-up: when a monster comes out to fight, its stronger moves are not ready yet.
+// Power 50 or less: ready at once; 55-65: after 1 turn; 70 or more: after 2 turns.
+// (The monster's weakest move is always ready at once, so it always has something to use.)
+function moveWarmup(id) {
+  const p = MOVES[id].power;
+  return p <= 50 ? 0 : p <= 65 ? 1 : 2;
+}
+
 // levels at which a monster reaches its first and its final evolution
 const EVO_LEVEL_1 = 20, EVO_LEVEL_2 = 30;
 // the monsters of stage 2 (Route 1) evolve once, at this level
@@ -389,6 +397,12 @@ const ENCOUNTERS = {
                                        ['hyacinth', 8], ['buffalo2', 10], ['durian2', 10], ['snail2', 8],
                                        ['rooster2', 8], ['tortoise2', 8], ['narwhal2', 6], ['lamb2', 5],
                                        ['pangolin2', 5], ['beetle3', 3], ['moth3', 3]] },
+  // the ancient city ruins (stage 5): ghosts and stone, and many evolved forms
+  route_i: { levels: [18, 21], table: [['moth2', 14], ['tortoise2', 14], ['snail', 12], ['gecko', 12], ['krathong', 12],
+                                       ['kite', 12], ['firefly', 10], ['buffalo', 10], ['bat2', 10], ['durian', 8]] },
+  route_j: { levels: [20, 24], table: [['kite2', 12], ['tortoise2', 12], ['moth2', 12], ['snail2', 10], ['buffalo2', 10],
+                                       ['durian2', 10], ['krathong2', 8], ['gecko2', 8], ['beetle2', 8],
+                                       ['tortoise3', 4], ['moth3', 4], ['beetle3', 4]] },
 };
 // the rival's team for the rematch at the end of Route 1: [species, level]; "starter2" is
 // the first evolution of the starter he took
@@ -417,6 +431,12 @@ const ROUTE2_TRAINERS = {
 // The rival's final team at the end of Route 2; "starter3" is the last form of his starter.
 // Beating it clears stage 3.
 const RIVAL_FINAL = [['kite2', 14], ['rooster2', 15], ['starter3', 16]];
+// Stage 5: the trainers in the ruins, and the rival's team at the old city gate
+const RUINS_TRAINERS = {
+  digger: { name: 'นักโบราณคดีศิลป์', flag: 'r5t1', team: [['snail2', 20], ['tortoise2', 21], ['kite', 21]] },
+  herder: { name: 'เด็กเลี้ยงควายต้นข้าว', flag: 'r5t2', team: [['buffalo', 20], ['rooster2', 21], ['buffalo2', 22]] },
+};
+const RIVAL_RUINS = [['kite2', 23], ['rooster2', 23], ['betta2', 24], ['starter3', 26]];
 // Items in the bag. kind "ball" catches wild monsters (rate multiplies the catch chance);
 // kind "heal" restores hit points in battle. price is in gold coins.
 const ITEMS = {

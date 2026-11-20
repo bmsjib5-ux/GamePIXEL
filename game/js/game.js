@@ -428,7 +428,7 @@
 
   // --------------------------------------------------------------- overworld
   // background tune of each map: the routes and the Rock Gym have their own, the rest share the village's
-  const mapMusic = () => AUDIO.music(['route1', 'route2', 'gym'].includes(MAP.id) ? 'route' : 'village');
+  const mapMusic = () => AUDIO.music(['route1', 'route2', 'gym', 'ruins'].includes(MAP.id) ? 'route' : 'village');
   function setMap(id) {
     MAP = MAPS[id] || MAPS.village;
     if (mode !== 'battle') mapMusic();
@@ -734,7 +734,7 @@
       'หัวหน้ายิมชอบใช้มอนสเตอร์ที่ทนทาน เตรียมยาไปให้พอ'); },
     async gym2_leader() {
       const g = GYM2.leader;
-      if (G.flags[g.flag]) { await say('เหรียญวารีเหมาะกับเธอมาก\nทางไปด่าน 5 อยู่ทางใต้ของตลาด ขอให้โชคดีนะ'); return; }
+      if (G.flags[g.flag]) { await say('เหรียญวารีเหมาะกับเธอมาก\nทางใต้ของตลาดคือซากเมืองโบราณ (ด่าน 5) ขอให้โชคดีนะ'); return; }
       if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของเธอหมดแรงหมดแล้ว ไปพักที่ศูนย์รักษาข้างตลาดก่อนเถอะ'); return; }
       await say('ยินดีต้อนรับสู่ยิมวารี! ฉันคือบัวน้ำ หัวหน้ายิมแห่งนี้');
       await say('สายน้ำดูอ่อนโยน แต่กัดเซาะได้แม้แต่หินผา\nมาดูกันว่าเธอจะรับมือกระแสน้ำของฉันได้ไหม!');
@@ -745,13 +745,13 @@
       G.flags.stones2 = true; G.bag.stone_water += GYM_STONES;
       await say('สุดยอดเลย! เธอไหลไปกับกระแสได้อย่างงดงาม\nรับเหรียญวารีนี้ไป เป็นหลักฐานว่าเธอชนะยิมแห่งนี้');
       await say('ได้รับเหรียญวารี ยาชั้นดี 3 ขวด และหินวิวัฒน์วารี ' + GYM_STONES + ' ก้อน!');
-      await say('ยินดีด้วย! คุณผ่านด่าน 4 แล้ว\nทางไปด่าน 5 อยู่ทางใต้ของตลาด (จะเปิดในเวอร์ชันถัดไป)');
+      await say('ยินดีด้วย! คุณผ่านด่าน 4 แล้ว\nทางใต้ของตลาดคือด่าน 5 ซากเมืองโบราณ');
       save();
     },
     async gym2_books() { await say('ตำรายิมวารี\n"ธาตุน้ำชนะไฟและหิน แต่แพ้ทางพืชกับไฟฟ้า"'); },
-    async sign_t4_top() { await say('ตลาดน้ำบางบัว\nทิศเหนือ : เส้นทางที่ 2   ทิศใต้ : ทางไปด่าน 5'); },
+    async sign_t4_top() { await say('ตลาดน้ำบางบัว\nทิศเหนือ : เส้นทางที่ 2   ทิศใต้ : ซากเมืองโบราณ (ด่าน 5)'); },
     async sign_t4_market() { await say('ลานตลาดน้ำ\nตะวันตก : ศูนย์รักษา   ตะวันออก : ยิมวารี'); },
-    async sign_t4_end() { await say('ทิศใต้ : ทางไปด่าน 5\nต้องมีเหรียญวารีจากยิมจึงจะผ่านได้'); },
+    async sign_t4_end() { await say('ทิศใต้ : ซากเมืองโบราณ (ด่าน 5)\nต้องมีเหรียญวารีจากยิมจึงจะผ่านได้'); },
     async t4_crate_a() {
       if (G.flags.t4a) { await say('ลังไม้ว่างเปล่า'); return; }
       G.flags.t4a = true; G.bag.capsule_gold += 3;
@@ -761,6 +761,45 @@
       if (G.flags.t4b) { await say('ลังไม้ว่างเปล่า'); return; }
       G.flags.t4b = true; G.bag.potion_plus += 2; G.gold += 500;
       await say('เปิดลังไม้ดู...\nพบยาชั้นดี 2 ขวด และเหรียญทอง 500 ทอง!'); save();
+    },
+
+    // ---- the ancient city ruins (stage 5)
+    async r5_digger() { await gymTrainer(RUINS_TRAINERS.digger, 'r5_digger',
+      'ซากเมืองนี้มีอายุหลายร้อยปี มอนสเตอร์ที่นี่ก็เก่าแก่และแข็งแกร่ง\nขอทดสอบฝีมือเธอหน่อยเถอะ!',
+      'ยอดเยี่ยม! เธอแข็งแกร่งพอจะเดินในเมืองเก่านี้ได้แล้ว',
+      'ปราสาทหินทางตะวันตกเคยเป็นศูนย์กลางของเมืองนี้ ลองไปดูจารึกที่ป้ายหน้าปราสาทสิ'); },
+    async r5_herder() { await gymTrainer(RUINS_TRAINERS.herder, 'r5_herder',
+      'ควายของผมแรงเยอะที่สุดในทุ่งนี้! มาประลองกันไหมพี่',
+      'แพ้แล้วครับ... เดี๋ยวพาควายไปแช่น้ำในคูเมืองก่อนนะ',
+      'พงหญ้าทางใต้มีมอนสเตอร์ร่างสุดท้ายซ่อนอยู่ด้วยนะพี่ ผมเคยเห็นแวบ ๆ'); },
+    async rival4() {
+      if (G.flags.stage5) { await say('ทางไปด่าน 6 อยู่หลังประตูเมืองเก่านี่แหละ\nแต่ได้ยินว่ายังไปไม่ได้ ไว้รอดูกันนะ!'); return; }
+      if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปดื่มน้ำพุในลานเมืองก่อนเถอะ'); return; }
+      await say('มาถึงซากเมืองโบราณจนได้! ตั้งแต่แพ้นายครั้งก่อน\nฉันฝึกหนักมาตลอดทางเลยนะ');
+      await say('ทีมฉันตอนนี้มีสี่ตัวแล้ว คราวนี้ไม่ยอมแพ้ง่าย ๆ แน่!');
+      const team = RIVAL_RUINS.map(([sp, lv]) => makeMon(sp === 'starter3' ? RIVAL_PICK[G.flags.starter] + '3' : sp, lv));
+      const result = await battle(team, { name: 'พายุ', img: 'chars/rival_large' });
+      if (result !== 'win') return;
+      G.flags.stage5 = true;
+      G.bag.capsule_gold += 3; G.bag.potion_plus += 3;
+      await say('...ยังเป็นนายที่เก่งกว่าอยู่ดี แต่ฉันจะตามให้ทันแน่!');
+      await say('ได้รับแคปซูลทอง 3 ลูกและยาชั้นดี 3 ขวด!');
+      await say('ยินดีด้วย! คุณผ่านด่าน 5 แล้ว\nทางไปด่าน 6 อยู่หลังประตูเมืองเก่า (จะเปิดในเวอร์ชันถัดไป)');
+      save();
+    },
+    async ruin_prasat() { await say('จารึกบนแผ่นหินเลือนลาง...\n"ณ เมืองนี้ ช้างเผือกแห่งฟ้าเคยลงมาเยือน"'); },
+    async sign_t5_top() { await say('ซากเมืองโบราณ\nทิศเหนือ : ตลาดน้ำบางบัว   ทิศใต้ : ประตูเมืองเก่า'); },
+    async sign_t5_court() { await say('ลานเมืองเก่า\nน้ำพุยังใช้ฟื้นพลังได้ และมีพ่อค้าเร่แวะมาขายของ'); },
+    async sign_t5_end() { await say('ประตูเมืองเก่า ทางไปด่าน 6\nคู่แข่งของคุณรออยู่ตรงนี้'); },
+    async t5_crate_a() {
+      if (G.flags.t5a) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.t5a = true; G.bag.potion_plus += 3;
+      await say('เปิดลังไม้ดู...\nพบยาชั้นดี 3 ขวด!'); save();
+    },
+    async t5_crate_b() {
+      if (G.flags.t5b) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.t5b = true; G.bag.capsule_gold += 3; G.gold += 800;
+      await say('เปิดลังไม้ดู...\nพบแคปซูลทอง 3 ลูก และเหรียญทอง 800 ทอง!'); save();
     },
 
     // ---- Route 2 (stage 3)
@@ -1019,12 +1058,22 @@
     await say('ลุยเลย ' + nm(bt.me) + '!');
 
     // ---- cooldowns
-    const cdLeft = (m, id) => Math.max(0, ((bt.ready.get(m) || {})[id] || 0) - bt.round);
+    // The first time a monster is looked at in this battle (when it comes out), its moves get
+    // their warm-up; its weakest move is ready at once.
+    function readyOf(m) {
+      if (!bt.ready.has(m)) {
+        const r = {};
+        const weakest = m.moves.reduce((w, id) => (MOVES[id].power < MOVES[w].power ? id : w), m.moves[0]);
+        for (const id of m.moves) if (id !== weakest && moveWarmup(id)) r[id] = bt.round + moveWarmup(id);
+        bt.ready.set(m, r);
+      }
+      return bt.ready.get(m);
+    }
+    const cdLeft = (m, id) => Math.max(0, (readyOf(m)[id] || 0) - bt.round);
     function startCooldown(m, id) {
       const c = moveCooldown(id);
       if (!c) return;
-      if (!bt.ready.has(m)) bt.ready.set(m, {});
-      bt.ready.get(m)[id] = bt.round + c + 1;
+      readyOf(m)[id] = bt.round + c + 1;
     }
     // the foe picks at random among its moves that are ready
     function foeMove() {
@@ -1279,7 +1328,7 @@
         if (ids.every((id) => cdLeft(bt.me, id) > 0)) ids.push('tackle');
         const opts = ids.map((id, k) => {
           const o = moveOption(id, bt.foe), left = k < bt.me.moves.length ? cdLeft(bt.me, id) : 0, cd = moveCooldown(id);
-          if (left) { o.disabled = true; o.sub = 'พักอีก ' + left + ' เทิร์น'; o.subColor = '#a39c8c'; }
+          if (left) { o.disabled = true; o.sub = 'พร้อมใช้ในอีก ' + left + ' เทิร์น'; o.subColor = '#a39c8c'; }
           else if (cd) o.sub += '  · พัก ' + cd;
           if (k >= bt.me.moves.length) o.label += ' (ท่าพื้นฐาน)';
           return o;

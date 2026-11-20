@@ -541,14 +541,98 @@ function buildTown() {
   m.things.sort((a, b) => a.sortY - b.sortY);
   m.npcs.push({ id: 'vendor', sheet: 'chars/npc_shopkeeper', c: 11, r: 20, dir: 'down' });
   m.exits.push({ side: 'up', c0: T4_ENTRY, c1: T4_ENTRY + 2, to: { map: 'route2', dc: 22 - T4_ENTRY, r: R2_H - 1 } });
-  m.exits.push({ side: 'down', c0: 14, c1: 16, to: null, need: 'badge2',
-                 lockedText: 'ทางไปด่าน 5 ถูกปิดไว้: "ผู้ที่จะผ่านต้องมีเหรียญวารี"\nไปท้าประลองที่ยิมวารีทางตะวันออกของตลาดก่อน',
-                 soonText: 'เหรียญวารีส่องประกาย ทางไปด่าน 5 เปิดแล้ว!\nแต่ด่าน 5 ยังอยู่ระหว่างสร้าง จะตามมาในเวอร์ชันถัดไป' });
+  m.exits.push({ side: 'down', c0: 14, c1: 16, to: { map: 'ruins', dc: 0, r: 0 }, need: 'badge2',
+                 lockedText: 'ทางไปด่าน 5 ถูกปิดไว้: "ผู้ที่จะผ่านต้องมีเหรียญวารี"\nไปท้าประลองที่ยิมวารีทางตะวันออกของตลาดก่อน' });
+  return m;
+}
+
+// A building drawn only as scenery: it blocks like a building but has no door to enter.
+function decoBuilding(B, name, doorCol, bottomRow) {
+  const m = B.m, meta = SPRITE_META.buildings[name];
+  const x = doorCol * TS + TS / 2 - meta.door, y = (bottomRow + 1) * TS - meta.h;
+  m.things.push({ img: 'buildings/' + name, x, y, w: meta.w, h: meta.h, sortY: (bottomRow + 1) * TS });
+  const c0 = Math.floor((x + meta.x0 + 4) / TS), c1 = Math.floor((x + meta.x1 - 5) / TS);
+  const r0 = Math.floor((y + meta.y0 + 16) / TS);
+  for (let r = r0; r <= bottomRow; r++) for (let c = c0; c <= c1; c++) B.block(c, r);
+}
+
+// Stage 5: the ancient city ruins. Jungle on the way in, broken walls, a ruined stone prasat,
+// a courtyard with a spring and a merchant, a lotus moat, thicker jungle in the south, and the
+// rival waiting at the far gate. Beating him clears stage 5; stage 6 is not built yet.
+const T5_W = 30, T5_H = 40;
+function buildRuins() {
+  const rng = seededRandom(20261123);
+  const B = mapBuilder('ruins', T5_W, T5_H, 'grass');
+  const m = B.m, ground = m.ground, block = B.block;
+  m.title = 'ด่าน 5  ซากเมืองโบราณ';
+  for (let r = 0; r < T5_H; r++) for (let c = 0; c < T5_W; c++) {
+    const v = rng();
+    ground[r][c] = v < 0.62 ? 'grass' : v < 0.90 ? 'grass_tufts' : v < 0.96 ? 'grass_white_flowers' : 'grass_color_flowers';
+  }
+  const put = (layout) => { for (const [k, name] of layout) { const [c, r] = k.split(',').map(Number); ground[r][c] = name; } };
+
+  // the old causeway runs straight through; a narrow path leads to the prasat
+  put(stripLayout('path', rect(14, 0, 16, 39), cells(line(9, 21, 13, 21)), true, T5_W, T5_H));
+  put(autotile('plaza', rect(11, 14, 19, 19), false, T5_W, T5_H));              // the old courtyard
+  // broken city walls (raised stone), with a gap for the causeway
+  put(autotile('plateau', rect(2, 10, 11, 11), false, T5_W, T5_H));
+  put(autotile('plateau', rect(19, 10, 27, 11), false, T5_W, T5_H));
+  put(autotile('plateau', rect(22, 33, 27, 35), false, T5_W, T5_H));
+  // the lotus moat
+  put(stripLayout('pond', rect(21, 14, 27, 20), new Set(), false, T5_W, T5_H));
+
+  // jungle: lighter on the way in, thicker past the courtyard
+  const grass = [[rect(2, 2, 11, 8), 'route_i'], [rect(19, 2, 27, 8), 'route_i'],
+                 [rect(2, 24, 12, 33), 'route_j'], [rect(18, 23, 27, 31), 'route_j']];
+  for (const [set, area] of grass) {
+    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = 'tall_grass'; m.tall.set(k, area); }
+  }
+  blockTerrain(m, block);
+  decoBuilding(B, 'gym', 6, 20);          // the ruined prasat, west of the courtyard
+
+  const object = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
+  const treeKinds = ['bamboo', 'tree_round', 'banana_tree', 'bamboo', 'tree_mango', 'tree_pine', 'coconut_palm'];
+  const pick = () => treeKinds[Math.floor(rng() * treeKinds.length)];
+  for (let c = 0; c < T5_W; c += 2) if (c < 12 || c > 16) object(pick(), c, 0);
+  for (let r = 2; r < T5_H; r += 2) { object(pick(), 0, r); object(pick(), 28, r); }
+  for (let r = 0; r < T5_H; r++) { block(0, r); block(1, r); block(28, r); block(29, r); }
+  for (let c = 0; c < T5_W; c++) if (c < 13 || c > 17) block(c, 0);
+  for (let c = 2; c < 28; c++) if (c < 14 || c > 16) object('fence_h', c, 39);
+
+  // rubble and old stones everywhere
+  for (const [c, r] of [[12, 9], [18, 9], [3, 13], [9, 13], [20, 12], [26, 12], [4, 22], [10, 22],
+                        [19, 22], [25, 22], [13, 35], [18, 36], [3, 36], [8, 35], [25, 37]]) {
+    object(rng() < 0.5 ? 'boulder' : 'rocks', c, r);
+  }
+  object('well', 12, 16, { id: 'spring' });
+  object('sala', 17, 15, { id: 'sala' });
+  object('lamp_post', 11, 19); object('lamp_post', 19, 19);
+  object('lotus', 22, 15, { flat: true }); object('lotus', 25, 17, { flat: true }); object('lotus', 23, 19, { flat: true });
+  object('boat', 24, 19, { flat: true });
+  object('spirit_house', 20, 21, { id: 'spirit_house' });
+  object('bamboo', 2, 15); object('tree_mango', 2, 18); object('banana_tree', 10, 34);
+  object('signpost_thai', 17, 2, { id: 'sign_t5_top' });
+  object('signpost_thai', 13, 13, { id: 'sign_t5_court' });
+  object('signpost_thai', 17, 37, { id: 'sign_t5_end' });
+  object('signpost_thai', 9, 22, { id: 'ruin_prasat' });
+  object('crate', 27, 9, { id: 't5_crate_a' });
+  object('crate', 2, 38, { id: 't5_crate_b' });
+
+  m.things.sort((a, b) => a.sortY - b.sortY);
+  m.npcs.push({ id: 'vendor', sheet: 'chars/npc_shopkeeper', c: 18, r: 18, dir: 'left' });
+  m.npcs.push({ id: 'r5_digger', sheet: 'chars/npc_gym_hiker', c: 13, r: 24, dir: 'right' });
+  m.npcs.push({ id: 'r5_herder', sheet: 'chars/npc_gym_kid', c: 17, r: 29, dir: 'left' });
+  m.npcs.push({ id: 'rival4', sheet: 'chars/npc_rival', c: 15, r: 36, dir: 'up' });
+  m.exits.push({ side: 'up', c0: 14, c1: 16, to: { map: 'town', dc: 0, r: T4_H - 1 } });
+  m.exits.push({ side: 'down', c0: 14, c1: 16, to: null, need: 'stage5',
+                 lockedText: 'พายุยืนขวางประตูเมืองเก่าอยู่\nต้องประลองชนะเขาก่อนจึงจะผ่านไปได้',
+                 soonText: 'ประตูเมืองเก่าเปิดออก ทางไปด่าน 6 อยู่ข้างหน้าแล้ว!\nแต่ด่าน 6 ยังอยู่ระหว่างสร้าง จะตามมาในเวอร์ชันถัดไป' });
   return m;
 }
 
 function buildMaps() {
-  const maps = { village: buildVillage(), route1: buildRoute1(), route2: buildRoute2(), town: buildTown() };
+  const maps = { village: buildVillage(), route1: buildRoute1(), route2: buildRoute2(), town: buildTown(),
+                 ruins: buildRuins() };
   for (const id of Object.keys(ROOMS)) maps[id] = buildRoom(id);
   return maps;
 }
