@@ -871,6 +871,10 @@
       save();
     },
     async lab_computer() {
+      const pick = await choose(['กล่องฝากมอนสเตอร์', 'ข้อมูลการวิจัย'], { x: 160, y: 120, w: 200, rowH: 26,
+        cancellable: true, title: 'คอมพิวเตอร์ศูนย์วิจัย' });
+      if (pick < 0) return;
+      if (pick === 0) { await storageBox(); return; }
       const names = goalCaught().map((sp) => SPECIES[sp].name);
       await say('คอมพิวเตอร์บันทึกข้อมูลมอนสเตอร์\nจับได้แล้ว ' + names.length + ' จาก 6 ชนิด' + (names.length ? ' : ' + names.join(' ') : ''));
       if (G.lab.length) await say('มอนสเตอร์ที่ฝากไว้ที่นี่ ' + G.lab.length + ' ตัว : ' + G.lab.map((m) => nm(m) + ' Lv.' + m.level).join(' '));
@@ -880,7 +884,10 @@
     async lab_tank() { await say('ถังแก้วบรรจุของเหลวสีฟ้าใส มีฟองอากาศลอยขึ้นเป็นระยะ'); },
     async lab_books() { await say('ตำราวิจัยเรียงแน่นเต็มชั้น\n"พงหญ้าฝั่งตะวันออกพบมอนสเตอร์ได้ครบทั้ง 6 ชนิด"'); },
     async lab_table() { await say('โต๊ะทำงานมีแก้วชาที่ดื่มค้างไว้กับกองเอกสาร'); },
-    async heal_machine() { await say('เครื่องฟื้นพลังมอนสเตอร์ มีช่องวางแคปซูล 6 ช่อง\nคุยกับพยาบาลที่เคาน์เตอร์เพื่อใช้งาน'); },
+    async heal_machine() {
+      await say('เครื่องฟื้นพลังมอนสเตอร์ เชื่อมต่อกับกล่องฝากของศูนย์วิจัย\n(ฟื้นพลังให้ทีม คุยกับพยาบาลที่เคาน์เตอร์)');
+      await storageBox();
+    },
     async heal_books() { await say('แผ่นพับของศูนย์รักษา\n"ถ้ามอนสเตอร์หมดแรงทั้งทีม เราจะพากลับมาดูแลที่นี่"'); },
     async shop_shelf() { await say('ชั้นวางสินค้ามีโหลแยม ขวดยา และกล่องแคปซูลเรียงเป็นระเบียบ'); },
     async mill_stone() { await say('หินโม่ขนาดใหญ่หมุนช้า ๆ ตามแรงลม บดเมล็ดข้าวเป็นแป้งละเอียด'); },
@@ -944,6 +951,81 @@
     const here = npcs.find((n) => n.id === npcId);
     if (here) { here.c = spot.c; here.r = spot.r; here.dir = spot.dir; }
     await fadeTo(0, 160);
+    save();
+  }
+
+  // ---- the storage box: monsters caught while the team was full wait here (G.lab).
+  // Open at the research lab's computer or the healing machine of any healing centre.
+  const monOption = (m) => ({ label: nm(m) + ' ' + rarityOf(m.sp).stars + '  Lv.' + m.level,
+    badge: SPECIES[m.sp].type, hp: [m.hp, stats(m).hp] });
+  // Pick one monster from a list, six per page. Returns its index, or -1 when backed out.
+  async function pickFromList(list, title) {
+    const PER = 6, pages = Math.max(1, Math.ceil(list.length / PER));
+    let page = 0;
+    for (;;) {
+      const part = list.slice(page * PER, page * PER + PER);
+      const opts = part.map(monOption);
+      if (pages > 1) opts.push({ label: '◀ หน้าก่อน', disabled: page === 0 }, { label: 'หน้าถัดไป ▶', disabled: page === pages - 1 });
+      const i = await choose(opts, { x: 50, y: 12, w: 380, rowH: 30, cancellable: true, title,
+        footer: pages > 1 ? 'หน้า ' + (page + 1) + ' / ' + pages + '   (ทั้งหมด ' + list.length + ' ตัว)' : 'ทั้งหมด ' + list.length + ' ตัว' });
+      if (i < 0) return -1;
+      if (i === part.length) { page--; continue; }
+      if (i === part.length + 1) { page++; continue; }
+      return page * PER + i;
+    }
+  }
+  // show the monster's card and ask to go ahead
+  async function confirmWithCard(m, yes) {
+    ui.card = m;
+    const pick = await choose([yes, 'กลับ'], { x: 212, y: 262, w: 220, cols: 2, rowH: 24, cancellable: true });
+    ui.card = null;
+    return pick === 0;
+  }
+  async function storageBox() {
+    await say('เปิดกล่องฝากมอนสเตอร์ของศูนย์วิจัย\nมอนสเตอร์ที่ฝากไว้จะได้พักจนพลังชีวิตเต็ม');
+    let at = 0;
+    for (;;) {
+      const i = await choose(['ถอนมอนสเตอร์ออกมา', 'ฝากมอนสเตอร์', 'สลับตัว (ทีม ⇄ กล่อง)', 'ออก'], {
+        x: 120, y: 60, w: 240, rowH: 28, cancellable: true, start: at,
+        title: 'กล่องฝากมอนสเตอร์', footer: 'ทีม ' + G.party.length + '/' + PARTY_MAX + '   ในกล่อง ' + G.lab.length + ' ตัว' });
+      if (i < 0 || i === 3) break;
+      at = i;
+      if (i === 0) {                                   // withdraw
+        if (!G.lab.length) { await say('ในกล่องยังไม่มีมอนสเตอร์'); continue; }
+        if (G.party.length >= PARTY_MAX) { await say('ทีมเต็มแล้ว (' + PARTY_MAX + ' ตัว)\nใช้ "สลับตัว" หรือฝากตัวในทีมก่อนนะ'); continue; }
+        const k = await pickFromList(G.lab, 'เลือกตัวที่จะถอนออกมา');
+        if (k < 0) continue;
+        const m = G.lab[k];
+        if (!(await confirmWithCard(m, 'ถอนเข้าทีม'))) continue;
+        G.lab.splice(k, 1); G.party.push(m);
+        AUDIO.sfx('confirm');
+        await say(nm(m) + 'เข้าร่วมทีมแล้ว!');
+      } else if (i === 1) {                            // deposit
+        if (G.party.length <= 1) { await say('ต้องมีมอนสเตอร์ในทีมอย่างน้อย 1 ตัว'); continue; }
+        const k = await pickFromList(G.party, 'เลือกตัวที่จะฝากไว้');
+        if (k < 0) continue;
+        const m = G.party[k];
+        if (G.party.length === 2 && G.party.some((x) => x !== m && x.hp <= 0) ) {
+          await say('ถ้าฝาก' + nm(m) + ' ทีมจะเหลือแต่ตัวที่หมดแรง\nไปรักษาก่อนแล้วค่อยฝากนะ'); continue;
+        }
+        if (!(await confirmWithCard(m, 'ฝากไว้'))) continue;
+        G.party.splice(k, 1); m.hp = stats(m).hp; G.lab.push(m);
+        AUDIO.sfx('confirm');
+        await say('ฝาก' + nm(m) + 'ไว้ในกล่องแล้ว');
+      } else {                                         // swap
+        if (!G.lab.length) { await say('ในกล่องยังไม่มีมอนสเตอร์ให้สลับ'); continue; }
+        const a = await pickFromList(G.party, 'เลือกตัวในทีมที่จะส่งเข้ากล่อง');
+        if (a < 0) continue;
+        const b = await pickFromList(G.lab, 'เลือกตัวในกล่องที่จะนำออกมาแทน' + nm(G.party[a]));
+        if (b < 0) continue;
+        const out = G.party[a], inn = G.lab[b];
+        if (!(await confirmWithCard(inn, 'สลับกับ' + nm(out)))) continue;
+        out.hp = stats(out).hp;
+        G.party[a] = inn; G.lab[b] = out;
+        AUDIO.sfx('confirm');
+        await say(nm(inn) + 'เข้าทีมแทน' + nm(out) + 'แล้ว\n' + nm(out) + 'ไปพักในกล่อง');
+      }
+    }
     save();
   }
 
@@ -1383,7 +1465,10 @@
           await say('จับ' + nm(bt.foe) + 'ได้แล้ว!');
           noteCaught(bt.foe.sp);
           if (G.party.length < PARTY_MAX) G.party.push(bt.foe);
-          else { G.lab.push(bt.foe); await say('ทีมเต็มแล้ว ' + nm(bt.foe) + 'ถูกส่งไปฝากไว้ที่ศูนย์วิจัย'); }
+          else {
+            bt.foe.hp = stats(bt.foe).hp; G.lab.push(bt.foe);
+            await say('ทีมเต็มแล้ว ' + nm(bt.foe) + 'ถูกส่งไปที่กล่องฝากมอนสเตอร์\n(เปิดกล่องได้ที่คอมพิวเตอร์ศูนย์วิจัย หรือเครื่องในศูนย์รักษา)');
+          }
           result = 'caught';
         } else {
           bt.capsule = null;
