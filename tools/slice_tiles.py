@@ -1,4 +1,4 @@
-"""Cut the tileset source sheets into a 32x32 tile atlas, object sprites and a demo map."""
+﻿"""Cut the tileset source sheets into a 32x32 tile atlas, object sprites and a demo map."""
 import os
 import sys
 
@@ -438,6 +438,41 @@ upper = tile["wall_indoor"].copy()
 upper[T // 2:] = upper[:T // 2]
 atlas[4 * T:5 * T, 2 * T:3 * T] = upper
 index.append(("wall_upper", 2, 4))
+
+
+# Rice paddies, drawn here pixel by pixel so they tile seamlessly: clumps of rice in neat
+# rows standing in shallow water. Green young rice and golden ripe rice.
+def rice_tile(blade, light, tip):
+    out = np.zeros((T, T, 4), np.uint8)
+    water, glint, dark = (58, 120, 104), (110, 176, 166), (24, 84, 46)
+    out[...] = water + (255,)
+    for y in range(T):                       # faint ripples in the water
+        for x in range(T):
+            if (x + 3 * y) % 16 == 0 and y % 4 == 2:
+                out[y, x, :3] = glint
+    # one clump: a fan of blades, 8 px tall, 7 px wide; clumps overlap row by row
+    shape = ["x..x..x", ".x.x.x.", ".x.x.x.", "..xxx..", "..xxx..", "..xxx..", "...x...", "...x..."]
+    for row, y0 in enumerate(range(0, T, 6 if T % 6 == 0 else 8)):
+        for x0 in range(0 if row % 2 == 0 else 4, T, 8):
+            for dy, line in enumerate(shape):
+                for dx, ch in enumerate(line):
+                    if ch != "x":
+                        continue
+                    x, y = (x0 + dx) % T, (y0 + dy) % T
+                    out[y, x, :3] = tip if dy < 1 else (light if dx < 3 else blade)
+                    # dark outline to the right and below each blade pixel
+                    for ox, oy in ((1, 0), (0, 1)):
+                        xx, yy = (x + ox) % T, (y + oy) % T
+                        if tuple(out[yy, xx, :3]) in (water, glint):
+                            out[yy, xx, :3] = dark
+    return out
+
+
+for i, (name, colours) in enumerate([
+        ("tall_rice", ((85, 194, 57), (150, 222, 80), (186, 236, 96))),
+        ("tall_rice_gold", ((214, 160, 48), (246, 206, 92), (255, 232, 140)))]):
+    atlas[5 * T:6 * T, i * T:(i + 1) * T] = rice_tile(*colours)
+    index.append((name, i, 5))
 tile = {name: atlas[r * T:(r + 1) * T, c * T:(c + 1) * T] for name, c, r in index}
 save(atlas, "tileset_terrain_32x32.png")
 with open(os.path.join(OUT, "tileset_terrain_32x32.txt"), "w", encoding="utf-8") as f:
@@ -541,6 +576,24 @@ if os.path.exists(os.path.join(SRC, "tileset_objects.png")):
             s = min(f for f, o in zip(fit, OBJ) if o[3] == group)
         tw, th = max(1, round((b[2] - b[0]) * s)), max(1, round((b[3] - b[1]) * s))
         objects[name] = on_canvas(reduce_palette(resample(a, b, tw, th), 20), fw, fh)
+    # Thai village objects, drawn on their own 4x4 sheet
+    OBJ_THAI = [("coconut_palm", 64, 96, "thai_trees"), ("banana_tree", 64, 96, "thai_trees"),
+                ("bamboo", 64, 96, "thai_trees"), ("tree_mango", 64, 96, "thai_trees"),
+                ("spirit_house", 32, 64, None), ("water_jar", 32, 32, None),
+                ("sala", 96, 96, None), ("lotus", 32, 32, None),
+                ("haystack", 32, 32, None), ("signpost_thai", 32, 32, None),
+                ("lamp_post", 32, 64, None), ("boat", 64, 32, None),
+                ("baskets", 32, 32, None), ("ox_cart", 64, 48, None),
+                ("food_cart", 64, 64, None), ("bench", 64, 32, None)]
+    if os.path.exists(os.path.join(SRC, "tileset_objects_thai.png")):
+        a = despeckle(load("tileset_objects_thai.png"))
+        boxes = piece_grid(a, 4, 4)
+        fit = [min(fw / (b[2] - b[0]), fh / (b[3] - b[1])) for b, (_, fw, fh, _) in zip(boxes, OBJ_THAI)]
+        for b, (name, fw, fh, group), s in zip(boxes, OBJ_THAI, fit):
+            if group:
+                s = min(f for f, o in zip(fit, OBJ_THAI) if o[3] == group)
+            tw, th = max(1, round((b[2] - b[0]) * s)), max(1, round((b[3] - b[1]) * s))
+            objects[name] = on_canvas(reduce_palette(resample(a, b, tw, th), 20), fw, fh)
     objects.update(bridge_layers)   # the decks alone, to lay over any water tile
     obj_sheet = pack(objects, "objects", "tileset_objects")
     print("objects:", len(objects))
@@ -561,6 +614,16 @@ if os.path.exists(os.path.join(SRC, "tileset_buildings.png")):
         gs = 192 / (gb[2] - gb[0])
         buildings["gym"] = on_canvas(reduce_palette(
             resample(g, gb, 192, round((gb[3] - gb[1]) * gs)), 40), T, T)
+    # Thai-style versions replace the village buildings and the gym (same names and widths,
+    # so the maps and the doors stay where they were); the lab keeps its glass dome.
+    if os.path.exists(os.path.join(SRC, "tileset_buildings_thai.png")):
+        t = despeckle(load("tileset_buildings_thai.png"))
+        for b, (name, width) in zip(piece_grid(t, 2, 3), [
+                ("house_red", 160), ("house_teal", 160), ("shop", 192),
+                ("healing_center", 192), ("windmill", 160), ("gym", 192)]):
+            sc = width / (b[2] - b[0])
+            buildings[name] = on_canvas(reduce_palette(
+                resample(t, b, width, round((b[3] - b[1]) * sc)), 40), T, T)
     bld_sheet = pack(buildings, "buildings", "tileset_buildings")
     print("buildings:", len(buildings), f"{1 / s:.2f} source px per pixel")
 

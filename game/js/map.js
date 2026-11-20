@@ -222,9 +222,10 @@ function buildVillage() {
   put(autotile('plateau', rect(26, 9, 29, 11), false));
 
   // ---- tall grass (wild monsters)
-  const grass = [[rect(9, 21, 12, 26), 'west'], [rect(6, 29, 12, 30), 'west'], [rect(18, 28, 25, 30), 'east']];
-  for (const [set, area] of grass) {
-    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = 'tall_grass'; m.tall.set(k, area); }
+  const grass = [[rect(9, 21, 12, 26), 'west'], [rect(6, 29, 12, 30), 'west'],
+                 [rect(18, 28, 25, 30), 'east', 'tall_rice_gold']];            // a ripe rice paddy
+  for (const [set, area, tile] of grass) {
+    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = tile || 'tall_grass'; m.tall.set(k, area); }
   }
 
   blockTerrain(m, block);
@@ -239,7 +240,7 @@ function buildVillage() {
   building('windmill', 'mill');
 
   // forest border: top row and both sides
-  const treeKinds = ['tree_round', 'tree_round', 'tree_pine', 'tree_round', 'tree_apple', 'tree_round', 'tree_pine', 'tree_orange'];
+  const treeKinds = ['coconut_palm', 'tree_mango', 'banana_tree', 'coconut_palm', 'bamboo', 'tree_round', 'banana_tree', 'tree_mango'];
   const pick = () => treeKinds[Math.floor(rng() * treeKinds.length)];
   for (let c = 0; c < MAP_W; c += 2) object(pick(), c, 2);
   for (let r = 4; r < MAP_H; r += 2) { object(pick(), 0, r); object(pick(), 30, r); }
@@ -248,17 +249,23 @@ function buildVillage() {
   // fence along the bottom, open where the road and the river leave
   for (let c = 2; c < 30; c++) if (c !== 4 && (c < 14 || c > 16)) object('fence_h', c, 31);
 
-  object('tree_apple', 9, 14); object('tree_orange', 19, 16); object('tree_pine', 2, 19);
-  object('tree_round', 10, 6); object('tree_round', 19, 6); object('tree_pine', 22, 26);
+  object('tree_mango', 9, 14); object('banana_tree', 19, 16); object('coconut_palm', 2, 19);
+  object('coconut_palm', 10, 6); object('coconut_palm', 19, 6); object('bamboo', 22, 26);
   object('flower_bed', 7, 8); object('flower_bed', 21, 8); object('flower_bed', 9, 16);
-  object('barrel', 21, 18); object('crate', 21, 17);
-  object('bush', 10, 15); object('bush', 18, 15); object('bush_berry', 12, 16); object('bush', 3, 9);
+  object('water_jar', 21, 18); object('crate', 21, 17);
+  object('bush', 10, 15); object('bush', 18, 15); object('bush_berry', 12, 16);
+  object('spirit_house', 3, 9, { id: 'spirit_house' });
+  object('water_jar', 9, 7); object('water_jar', 9, 17); object('baskets', 3, 17);
+  object('lamp_post', 10, 12); object('lamp_post', 20, 12);
+  object('food_cart', 20, 20, { id: 'food_cart' });
+  object('haystack', 29, 28); object('haystack', 25, 25); object('ox_cart', 23, 25);
+  object('lotus', 3, 22, { flat: true }); object('lotus', 6, 24, { flat: true }); object('lotus', 4, 25, { flat: true });
   object('bush_berry', 22, 12); object('bush', 9, 19); object('bush', 26, 13);
   object('rocks', 11, 27); object('boulder', 19, 25); object('boulder', 27, 10); object('rocks', 5, 20);
-  object('well', 21, 22, { id: 'well' });
-  object('signpost', 13, 14, { id: 'sign_village' });
-  object('signpost', 17, 30, { id: 'sign_route' });
-  object('signpost', 13, 20, { id: 'sign_grass' });
+  object('sala', 21, 22, { id: 'sala' });          // an open Thai pavilion on the cobbled court
+  object('signpost_thai', 13, 14, { id: 'sign_village' });
+  object('signpost_thai', 17, 30, { id: 'sign_route' });
+  object('signpost_thai', 13, 20, { id: 'sign_grass' });
   object('crate', 2, 27, { id: 'item_crate' });
 
   m.things.sort((a, b) => a.sortY - b.sortY);
@@ -322,18 +329,19 @@ function buildRoute1() {
   put(autotile('plateau', rect(23, 28, 25, 30), false, R1_W, R1_H));
 
   // ---- tall grass: gentler north of the river, tougher in the south
-  const grass = [[rect(2, 3, 11, 5), 'route_a'], [rect(17, 3, 25, 8), 'route_a'],
+  const grass = [[rect(2, 3, 11, 5), 'route_a', 'tall_rice'], [rect(17, 3, 25, 8), 'route_a', 'tall_rice'],
                  [rect(9, 10, 18, 12), 'route_b'], [rect(9, 14, 17, 16), 'route_b'],
-                 [rect(2, 21, 8, 26), 'route_c'], [rect(2, 29, 17, 33), 'route_c'], [rect(23, 20, 25, 26), 'route_c']];
-  for (const [set, area] of grass) {
-    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = 'tall_grass'; m.tall.set(k, area); }
+                 [rect(2, 21, 8, 26), 'route_c'], [rect(2, 29, 17, 33), 'route_c', 'tall_rice_gold'],
+                 [rect(23, 20, 25, 26), 'route_c']];
+  for (const [set, area, tile] of grass) {
+    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = tile || 'tall_grass'; m.tall.set(k, area); }
   }
   blockTerrain(m, block);
   placeBuilding(B, 'gym', 'gym');
 
   const object = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
   // forest on both sides (left open where the river passes), trees along the top, fence along the bottom
-  const treeKinds = ['tree_round', 'tree_pine', 'tree_round', 'tree_pine', 'tree_orange', 'tree_round', 'tree_apple', 'tree_pine'];
+  const treeKinds = ['coconut_palm', 'tree_mango', 'banana_tree', 'coconut_palm', 'bamboo', 'tree_round', 'banana_tree', 'tree_mango'];
   const pick = () => treeKinds[Math.floor(rng() * treeKinds.length)];
   for (let c = 0; c < R1_W; c += 2) if (c < 12 || c > 16) object(pick(), c, 2);
   for (let r = 4; r < R1_H; r += 2) if (r < 13 || r > 15) { object(pick(), 0, r); object(pick(), 26, r); }
@@ -342,17 +350,19 @@ function buildRoute1() {
   block(12, 0); block(16, 0);
   for (let c = 2; c < 26; c++) if (c < 19 || c > 21) object('fence_h', c, 35);
 
-  object('tree_apple', 3, 20); object('tree_round', 22, 19); object('tree_pine', 3, 12);
-  object('tree_orange', 17, 24); object('tree_pine', 15, 31); object('tree_round', 4, 31);
+  object('tree_mango', 3, 20); object('coconut_palm', 22, 19); object('bamboo', 3, 12);
+  object('banana_tree', 17, 24); object('coconut_palm', 15, 31); object('coconut_palm', 4, 31);
+  object('boat', 22, 13, { flat: true }); object('lotus', 21, 11, { flat: true }); object('lotus', 24, 14, { flat: true });
+  object('haystack', 2, 6); object('haystack', 16, 8); object('bench', 11, 28);
   object('bush', 16, 6); object('bush_berry', 3, 9); object('bush', 19, 9); object('bush', 18, 15);
   object('bush_berry', 22, 27); object('bush', 8, 20); object('bush', 24, 33);
   object('rocks', 12, 6); object('boulder', 24, 29); object('rocks', 3, 16); object('boulder', 17, 21); object('rocks', 22, 22);
   object('well', 9, 28, { id: 'spring' });
-  object('signpost', 16, 2, { id: 'sign_r1_top' });
-  object('signpost', 8, 11, { id: 'sign_r1_bridge' });
-  object('signpost', 13, 27, { id: 'sign_r1_spring' });
-  object('signpost', 22, 34, { id: 'sign_r1_end' });
-  object('signpost', 12, 26, { id: 'sign_gym' });
+  object('signpost_thai', 16, 2, { id: 'sign_r1_top' });
+  object('signpost_thai', 8, 11, { id: 'sign_r1_bridge' });
+  object('signpost_thai', 13, 27, { id: 'sign_r1_spring' });
+  object('signpost_thai', 22, 34, { id: 'sign_r1_end' });
+  object('signpost_thai', 12, 26, { id: 'sign_gym' });
   object('crate', 2, 8, { id: 'r1_crate_a' });
   object('crate', 25, 18, { id: 'r1_crate_b' });
   object('crate', 2, 34, { id: 'r1_crate_c' });
@@ -396,17 +406,17 @@ function buildRoute2() {
   put(autotile('plaza', rect(8, 28, 13, 30), false, R2_W, R2_H));        // resting place with a spring
 
   // ---- tall grass: route_d up north, route_e by the lake, route_f (toughest) in the south
-  const grass = [[rect(3, 3, 10, 7), 'route_d'], [rect(18, 3, 25, 7), 'route_d'],
+  const grass = [[rect(3, 3, 10, 7), 'route_d', 'tall_rice'], [rect(18, 3, 25, 7), 'route_d', 'tall_rice'],
                  [rect(8, 13, 14, 22), 'route_e'], [rect(17, 22, 25, 23), 'route_e'],
                  [rect(2, 28, 6, 35), 'route_f'], [rect(15, 28, 20, 35), 'route_f']];
-  for (const [set, area] of grass) {
-    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = 'tall_grass'; m.tall.set(k, area); }
+  for (const [set, area, tile] of grass) {
+    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = tile || 'tall_grass'; m.tall.set(k, area); }
   }
   blockTerrain(m, block);
 
   const object = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
   // forest on both sides, trees along the top, fence along the bottom
-  const treeKinds = ['tree_pine', 'tree_pine', 'tree_round', 'tree_pine', 'tree_apple', 'tree_round', 'tree_pine', 'tree_orange'];
+  const treeKinds = ['bamboo', 'coconut_palm', 'tree_mango', 'bamboo', 'banana_tree', 'tree_round', 'coconut_palm', 'bamboo'];
   const pick = () => treeKinds[Math.floor(rng() * treeKinds.length)];
   for (let c = 0; c < R2_W; c += 2) if (c < 12 || c > 16) object(pick(), c, 2);
   for (let r = 4; r < R2_H; r += 2) { object(pick(), 0, r); object(pick(), 28, r); }
@@ -415,14 +425,17 @@ function buildRoute2() {
   block(12, 0); block(16, 0);
   for (let c = 2; c < 28; c++) if (c < 22 || c > 24) object('fence_h', c, 37);
 
-  object('tree_round', 15, 16); object('tree_pine', 2, 22); object('tree_apple', 25, 31);
+  object('tree_mango', 15, 16); object('bamboo', 2, 22); object('coconut_palm', 25, 31);
+  object('boat', 20, 17, { flat: true }); object('lotus', 18, 15, { flat: true });
+  object('lotus', 23, 19, { flat: true }); object('lotus', 24, 15, { flat: true });
+  object('spirit_house', 26, 25, { id: 'spirit_house' }); object('bench', 12, 30);
   object('rocks', 12, 8); object('boulder', 17, 8); object('rocks', 26, 13); object('boulder', 16, 23);
   object('boulder', 7, 23); object('rocks', 14, 32); object('boulder', 21, 29); object('rocks', 26, 23);
   object('bush', 16, 12); object('bush_berry', 7, 16); object('bush', 26, 27); object('bush_berry', 2, 12);
   object('well', 10, 29, { id: 'spring' });
-  object('signpost', 16, 2, { id: 'sign_r2_top' });
-  object('signpost', 14, 29, { id: 'sign_r2_spring' });
-  object('signpost', 21, 35, { id: 'sign_r2_end' });
+  object('signpost_thai', 16, 2, { id: 'sign_r2_top' });
+  object('signpost_thai', 14, 29, { id: 'sign_r2_spring' });
+  object('signpost_thai', 21, 35, { id: 'sign_r2_end' });
   object('crate', 26, 8, { id: 'r2_crate_a' });
   object('crate', 2, 26, { id: 'r2_crate_b' });
   object('crate', 26, 35, { id: 'r2_crate_c' });

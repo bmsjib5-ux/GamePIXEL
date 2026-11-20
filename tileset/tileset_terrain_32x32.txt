@@ -123,3 +123,5 @@ river_join_w, 9, 11
 river_bridge_ew, 0, 4
 river_bridge_ns, 1, 4
 wall_upper, 2, 4
+tall_rice, 0, 5
+tall_rice_gold, 1, 5

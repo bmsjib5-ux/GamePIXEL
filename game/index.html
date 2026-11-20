@@ -62,6 +62,12 @@
   #btnA { right: 0; top: 14px; background: rgba(224, 86, 47, 0.45); }
   #btnB { left: 0; bottom: 0; background: rgba(47, 134, 224, 0.40); }
   #btns button.down { background: rgba(255, 216, 102, 0.75); color: #2b2420; }
+  #btnBot { position: fixed; z-index: 6; top: calc(8px + env(safe-area-inset-top, 0px));
+            left: calc(8px + env(safe-area-inset-left, 0px)); padding: 6px 10px; border-radius: 8px;
+            font: 600 13px "Leelawadee UI", "Noto Sans Thai", Tahoma, sans-serif; color: #fff;
+            background: rgba(20, 24, 34, 0.55); border: 2px solid rgba(255, 255, 255, 0.35);
+            touch-action: manipulation; cursor: pointer; }
+  #btnBot.on { background: rgba(214, 120, 28, 0.85); border-color: #ffd866; }
   #btnFull { top: calc(8px + env(safe-area-inset-top, 0px)); right: calc(8px + env(safe-area-inset-right, 0px));
              width: 38px; height: 38px; font-size: 17px; border-radius: 8px; }
 </style>
@@ -77,10 +83,12 @@
   </div>
   <button id="btnFull" type="button" aria-label="เต็มจอ">⛶</button>
 </div>
+<!-- auto-play bot for testing: off -> x1 -> x4 (key P) -->
+<button id="btnBot" type="button" aria-label="บอทเล่นอัตโนมัติ" title="บอทเล่นอัตโนมัติ (ปุ่ม P)">บอท</button>
 <!-- raise ?v= whenever these files change, so browsers do not keep an old copy -->
-<script src="js/tiles.js?v=18"></script>
-<script src="js/data.js?v=18"></script>
-<script src="js/map.js?v=18"></script>
-<script src="js/game.js?v=18"></script>
+<script src="js/tiles.js?v=20"></script>
+<script src="js/data.js?v=20"></script>
+<script src="js/map.js?v=20"></script>
+<script src="js/game.js?v=20"></script>
 </body>
 </html>

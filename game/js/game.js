@@ -224,6 +224,7 @@
         opts, cols, rowH, w, h, titleH, title: o.title, footer: o.footer,
         x: o.x !== undefined ? o.x : VW - w - 8, y: o.y !== undefined ? o.y : 228 - h,
         index: Math.min(o.start || 0, opts.length - 1), cancellable: !!o.cancellable, onMove: o.onMove, resolve,
+        kind: o.kind, data: o.data,
       };
       if (o.onMove) o.onMove(ui.menu.index);
     });
@@ -743,6 +744,9 @@
     async sign_grass() { await say('ระวัง! พงหญ้าสูงมีมอนสเตอร์ป่า\nฝั่งตะวันตกเหมาะกับมือใหม่ ฝั่งตะวันออกมีตัวที่แข็งแกร่งกว่า'); },
     async sign_route() { await say('ทิศใต้ : เส้นทางที่ 1\nมีมอนสเตอร์ชนิดใหม่ที่ไม่พบในหมู่บ้าน'); },
     async well() { await say('น้ำในบ่อใสแจ๋ว มองเห็นก้นบ่อเลย'); },
+    async sala() { await say('ศาลาไม้ริมลาน ลมพัดเย็นสบาย\nชาวบ้านมักมานั่งพักคุยกันตอนบ่าย'); },
+    async spirit_house() { await say('ศาลพระภูมิประดับพวงมาลัยดาวเรือง\nมีน้ำแดงกับขนมวางไว้อย่างเรียบร้อย'); },
+    async food_cart() { await say('รถเข็นขายข้าวเหนียวหมูปิ้งกับลูกชิ้นทอด\nกลิ่นหอมฉุยไปทั้งลาน'); },
     // ---- inside the buildings
     async home_bed() {
       if (!(await yesNo('เตียงของคุณเอง จะนอนพักสักครู่ไหม?'))) return;
@@ -1001,7 +1005,7 @@
       await say(nm(m) + 'อยากเรียนท่า' + mv.name + ' (ธาตุ' + TYPES[mv.type].name + ' พลัง ' + mv.power + ')\nแต่จำท่าได้สูงสุด ' + MAX_MOVES + ' ท่า');
       const opts = m.moves.map((x) => moveOption(x, null));
       opts.push({ label: 'ไม่เรียนท่าใหม่', sub: 'เก็บท่าเดิมไว้ทั้งหมด' });
-      const i = await choose(opts, { x: 4, y: 181, w: 472, cols: 2, rowH: 33,
+      const i = await choose(opts, { x: 4, y: 181, w: 472, cols: 2, rowH: 33, kind: 'learn', data: { mon: m, id },
         title: 'จะให้ลืมท่าไหน เพื่อเรียนท่า' + mv.name + '?' });
       if (i >= m.moves.length) { await say(nm(m) + 'ไม่ได้เรียนท่า' + mv.name); return; }
       const old = MOVES[m.moves[i]].name;
@@ -1064,7 +1068,7 @@
       if (!have.length) { await say(kind === 'ball' ? 'แคปซูลหมดแล้ว!' : 'ยาหมดแล้ว!'); return null; }
       if (have.length === 1) return have[0];
       const i = await choose(have.map((id) => ({ label: ITEMS[id].name, right: 'x' + G.bag[id] })),
-        { x: 262, y: 236, w: 214, cols: 1, rowH: 30, cancellable: true });
+        { x: 262, y: 236, w: 214, cols: 1, rowH: 30, cancellable: true, kind: 'item', data: have });
       return i < 0 ? null : have[i];
     }
 
@@ -1078,12 +1082,12 @@
         ui.prompt = nm(bt.me) + 'จะทำอะไรดี?';
         const act = await choose([
           'ต่อสู้', { label: 'แคปซูล', right: 'x' + itemCount('ball') },
-          { label: 'ยา', right: 'x' + itemCount('heal') }, 'หนี'], { x: 262, y: 236, w: 214, cols: 2, rowH: 33, start: bt.lastAct || 0 });
+          { label: 'ยา', right: 'x' + itemCount('heal') }, 'หนี'], { x: 262, y: 236, w: 214, cols: 2, rowH: 33, start: bt.lastAct || 0, kind: 'act' });
         bt.lastAct = act;
         ui.prompt = null;
         if (act === 0) {
           const i = await choose(bt.me.moves.map((id) => moveOption(id, bt.foe)), {
-            x: 4, y: 236, w: 472, cols: 2, rowH: 33, minH: 80, cancellable: true });
+            x: 4, y: 236, w: 472, cols: 2, rowH: 33, minH: 80, cancellable: true, kind: 'move' });
           if (i < 0) continue;
           const mv = MOVES[bt.me.moves[i]], s = bt.spr.me;
           await say(nm(bt.me) + 'ใช้ท่า' + mv.name + '!');
@@ -1136,19 +1140,20 @@
       await say('ตำนานเล่าว่ามันจะปรากฏอีกครั้งเมื่อถึงเวลา\n(รอพบกันใหม่ในอัปเดตถัดไป)');
       return 'legend';
     }
+    bt.legend = !!opts.legend;
     if (opts.legend) result = await legendLoop();
 
     while (!result) {
       ui.prompt = nm(bt.me) + 'จะทำอะไรดี?';
       const act = await choose([
         'ต่อสู้', { label: 'แคปซูล', right: 'x' + itemCount('ball') },
-        { label: 'ยา', right: 'x' + itemCount('heal') }, 'หนี'], { x: 262, y: 236, w: 214, cols: 2, rowH: 33, start: bt.lastAct || 0 });
+        { label: 'ยา', right: 'x' + itemCount('heal') }, 'หนี'], { x: 262, y: 236, w: 214, cols: 2, rowH: 33, start: bt.lastAct || 0, kind: 'act' });
       bt.lastAct = act;
       ui.prompt = null;
 
       if (act === 0) {
         const i = await choose(bt.me.moves.map((id) => moveOption(id, bt.foe)), {
-          x: 4, y: 236, w: 472, cols: 2, rowH: 33, minH: 80, cancellable: true });
+          x: 4, y: 236, w: 472, cols: 2, rowH: 33, minH: 80, cancellable: true, kind: 'move' });
         if (i < 0) continue;
         const mine = bt.me.moves[i], theirs = bt.foe.moves[rand(bt.foe.moves.length)];
         const ms = stats(bt.me).spd, fs = stats(bt.foe).spd;
@@ -1592,7 +1597,8 @@
     const dt = Math.min(0.05, (now - last) / 1000 || 0);
     last = now;
     pollGamepad();
-    tick(dt);
+    const n = bot.on ? bot.speed : 1;
+    for (let i = 0; i < n; i++) { if (bot.on) botStep(dt); tick(dt); }
     render();
     requestAnimationFrame(frame);
   }
@@ -1639,6 +1645,9 @@
 
   async function boot() {
     setupTouch();
+    const botBtn = document.getElementById('btnBot');
+    if (botBtn) botBtn.addEventListener('click', (ev) => { ev.preventDefault(); cycleBot(); botBtn.blur(); });
+    window.addEventListener('keydown', (ev) => { if ((ev.key === 'p' || ev.key === 'P') && !ev.repeat) cycleBot(); });
     resize();
     requestAnimationFrame(frame);
     MAPS = buildMaps();
@@ -1650,8 +1659,169 @@
   // phones often close a page without "beforeunload", so also save when it goes to the background
   document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'world' && !busy) save(); });
 
+
+  // ------------------------------------------------------------ auto-play bot
+  // For testing: plays by itself. It answers messages and menus, fights with the strongest
+  // move, uses potions when low, catches species not caught yet, heals at the spring or the
+  // healing centre, and otherwise walks through tall grass to find wild monsters.
+  // It does not take on trainers, the gym or the story by itself (it only collects the
+  // starter). Toggle: the robot button or the P key; each press cycles off -> x1 -> x4.
+  const bot = { on: false, speed: 1, cool: 0, wander: null, last: '' };
+  function setBot(on, speed) {
+    bot.on = on; bot.speed = speed; bot.cool = 0;
+    holdDir('bot', 'up', false);
+    const el = document.getElementById('btnBot');
+    if (el) {
+      el.textContent = on ? 'บอท ×' + speed : 'บอท';
+      el.classList.toggle('on', on);
+    }
+  }
+  function cycleBot() {
+    if (!bot.on) setBot(true, 1); else if (bot.speed === 1) setBot(true, 4); else setBot(false, 1);
+  }
+  const hpRatio = (m) => m.hp / stats(m).hp;
+  const teamRatio = () => {
+    const alive = G.party.filter((m) => m.hp > 0);
+    return alive.length ? alive.reduce((n, m) => n + hpRatio(m), 0) / G.party.length : 0;
+  };
+  function moveScore(id, me, foe) {
+    const mv = MOVES[id];
+    return mv.power * typeMult(mv.type, SPECIES[foe.sp].type) * (mv.type === SPECIES[me.sp].type ? 1.5 : 1);
+  }
+  // which option to take in the open menu (-1 = cancel)
+  function botMenuPick(m) {
+    const labels = m.opts.map((o) => o.label);
+    if (labels[0] === 'ใช่' && labels[1] === 'ไม่') return 0;
+    if (m.kind === 'act' && bt) {
+      const me = bt.me, foe = bt.foe, wild = bt.trainerX === null;
+      if (bt.legend) return 3;                                    // the legend: just back away
+      if (hpRatio(me) < 0.3 && itemCount('heal') > 0) return 2;
+      if (wild && !G.caught.includes(foe.sp) && itemCount('ball') > 0 && foe.hp / stats(foe).hp < 0.5) return 1;
+      if (wild && hpRatio(me) < 0.2) return 3;
+      return 0;
+    }
+    if (m.kind === 'move' && bt) {
+      let best = 0;
+      bt.me.moves.forEach((id, i) => { if (moveScore(id, bt.me, bt.foe) > moveScore(bt.me.moves[best], bt.me, bt.foe)) best = i; });
+      return best;
+    }
+    if (m.kind === 'item') {
+      const have = m.data;
+      if (bt && have.includes('potion_plus') && stats(bt.me).hp - bt.me.hp >= 40) return have.indexOf('potion_plus');
+      return have.indexOf('potion') >= 0 ? have.indexOf('potion') : have.indexOf('capsule') >= 0 ? have.indexOf('capsule') : 0;
+    }
+    if (m.kind === 'learn') {                                     // forget the weakest move if the new one is stronger
+      const mon = m.data.mon, power = (id) => MOVES[id].power * (MOVES[id].type === SPECIES[mon.sp].type ? 1.5 : 1);
+      let weakest = 0;
+      mon.moves.forEach((id, i) => { if (power(id) < power(mon.moves[weakest])) weakest = i; });
+      return power(m.data.id) > power(mon.moves[weakest]) ? weakest : mon.moves.length;
+    }
+    return m.cancellable ? -1 : 0;                                // shops, team screen and the like: leave
+  }
+  // shortest walk to any of the goal cells; returns the first step's direction, '' when already there
+  function botPath(goals, avoidGrass) {
+    const key = (c, r) => c + ',' + r;
+    const start = key(pl.c, pl.r);
+    if (goals.has(start)) return '';
+    const from = new Map([[start, null]]);
+    const q = [[pl.c, pl.r]];
+    while (q.length) {
+      const [c, r] = q.shift();
+      for (const d of ['up', 'down', 'left', 'right']) {
+        const nc = c + DIRS[d][0], nr = r + DIRS[d][1], k = key(nc, nr);
+        if (from.has(k)) continue;
+        const door = MAP.warps.has(k);                            // doors are blocked cells you walk into
+        if (door && !goals.has(k)) continue;
+        if (!door && isBlocked(nc, nr)) continue;
+        if (avoidGrass && MAP.tall.has(k) && !goals.has(k)) continue;
+        from.set(k, [key(c, r), d]);
+        if (goals.has(k)) {                                       // walk back to the first step
+          let cur = k, step = d;
+          while (from.get(cur) && from.get(cur)[0] !== start) cur = from.get(cur)[0];
+          step = from.get(cur)[1];
+          return step;
+        }
+        q.push([nc, nr]);
+      }
+    }
+    return null;
+  }
+  // stand next to cell (c, r), face it and press the confirm key
+  function botVisit(cells, avoidGrass) {
+    const goals = new Set(), faceOf = new Map();
+    for (const [c, r] of cells) {
+      for (const d of ['up', 'down', 'left', 'right']) {
+        const sc = c - DIRS[d][0], sr = r - DIRS[d][1];
+        if (!isBlocked(sc, sr)) { goals.add(sc + ',' + sr); faceOf.set(sc + ',' + sr, d); }
+      }
+    }
+    const step = botPath(goals, avoidGrass);
+    if (step === '') { pl.dir = faceOf.get(pl.c + ',' + pl.r); press('ok', false); return true; }
+    if (step) { pl.dir = step; tryMove(step); return true; }
+    return false;
+  }
+  function botWorld() {
+    const npc = (id) => npcs.filter((n) => n.id === id).map((n) => [n.c, n.r]);
+    const spots = (id) => [...MAP.interact].filter(([, v]) => v === id).map(([k]) => k.split(',').map(Number));
+    // 1. no partner yet: see the professor
+    if (!G.party.length) { if (MAP.id === 'village' && botVisit(npc('researcher'), true)) return; }
+    // 2. tired: heal at the spring, or at the healing centre in the village
+    else if (teamRatio() < 0.45 || G.party.every((m) => m.hp <= 0)) {
+      if (spots('spring').length && botVisit(spots('spring'), true)) return;
+      if (MAP.id === 'heal' && botVisit(spots('healer'), true)) return;
+      if (MAP.id === 'village') {
+        const door = [...MAP.warps].find(([, w]) => w.map === 'heal');
+        if (door) { const step = botPath(new Set([door[0]]), true); if (step) { pl.dir = step; tryMove(step); return; } }
+      }
+    }
+    // 3. indoors with nothing to do: go out
+    if (MAP.indoor) {
+      const out = new Set([...MAP.warps.keys()]);
+      const step = botPath(out, false);
+      if (step) { pl.dir = step; tryMove(step); return; }
+    }
+    // 4. otherwise roam the tall grass
+    if (MAP.tall.has(pl.c + ',' + pl.r)) {
+      const opts = ['up', 'down', 'left', 'right'].filter((d) => {
+        const k = (pl.c + DIRS[d][0]) + ',' + (pl.r + DIRS[d][1]);
+        return MAP.tall.has(k) && !isBlocked(pl.c + DIRS[d][0], pl.r + DIRS[d][1]);
+      });
+      if (opts.length) {
+        if (!bot.wander || !opts.includes(bot.wander) || Math.random() < 0.25) bot.wander = opts[rand(opts.length)];
+        pl.dir = bot.wander; tryMove(bot.wander); return;
+      }
+    }
+    const step = botPath(new Set(MAP.tall.keys()), false);
+    if (step) { pl.dir = step; tryMove(step); return; }
+    // nothing to do on this map (no grass): head back toward the village
+    const exits = MAP.exits.filter((e) => e.to && e.to.map === (MAP.id === 'route2' ? 'route1' : 'village'));
+    if (exits.length) {
+      const e = exits[0], goals = new Set();
+      for (let c = e.c0; c <= e.c1; c++) goals.add(c + ',' + (e.side === 'up' ? 0 : MAP.h - 1));
+      const s = botPath(goals, false);
+      if (s === '') { pl.dir = e.side; tryMove(e.side); } else if (s) { pl.dir = s; tryMove(s); }
+    }
+  }
+  function botStep(dt) {
+    bot.cool -= dt;
+    if (bot.cool > 0) return;
+    bot.cool = 0.12;
+    if (ui.wait) { press('ok', false); return; }
+    if (ui.menu) {
+      const m = ui.menu, i = botMenuPick(m);
+      if (i < 0) { press('back', false); return; }
+      if (m.opts[i] && m.opts[i].disabled) { if (m.cancellable) press('back', false); return; }
+      m.index = i; if (m.onMove) m.onMove(i);
+      press('ok', false);
+      return;
+    }
+    if (ui.msg) { const len = pageLength(ui.msg.pages[ui.msg.page]); ui.msg.shown = len; press('ok', false); return; }
+    if (mode === 'world' && !busy && !pl.moving && G) { bot.cool = 0; botWorld(); }
+  }
+
   // for testing from the browser console
   window.GAME = {
+    bot: (on, speed) => setBot(on, speed || 1), botState: () => ({ ...bot }),
     get state() { return { mode, busy, G, pl, bt, msg: ui.msg ? ui.msg.pages.map((p) => p.map((l) => l.join('')).join('\n')).join('\n') : null,
       menu: ui.menu ? { index: ui.menu.index, opts: ui.menu.opts.map((o) => o.label) } : null, prompt: ui.prompt }; },
     press, map: () => MAP, maps: () => MAPS,
@@ -1661,7 +1831,7 @@
     // run the game for a number of seconds without waiting for the screen to refresh
     async advance(seconds) {
       const turn = () => new Promise((r) => { const ch = new MessageChannel(); ch.port1.onmessage = () => r(); ch.port2.postMessage(0); });
-      for (let t = 0; t < seconds; t += 1 / 60) { tick(1 / 60); await turn(); }
+      for (let t = 0; t < seconds; t += 1 / 60) { if (bot.on) botStep(1 / 60); tick(1 / 60); await turn(); }
       render();
     },
   };
