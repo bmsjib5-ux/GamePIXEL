@@ -391,6 +391,6 @@ const SHOP_STOCK = ['capsule', 'capsule_gold', 'potion', 'potion_plus'];
 // Gold: a new game starts with GOLD_START; old saves without gold get the same amount.
 // Beating a wild monster pays its level x GOLD_WILD; beating a trainer pays the sum of the
 // team's levels x GOLD_TRAINER.
-const GOLD_START = 300, GOLD_WILD = 12, GOLD_TRAINER = 25;
+const GOLD_START = 300, GOLD_WILD = 6, GOLD_TRAINER = 12.5;      // halved from 12 / 25
 const ENCOUNTER_CHANCE = 0.13;
 const PARTY_MAX = 6;

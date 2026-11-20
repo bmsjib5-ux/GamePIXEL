@@ -984,11 +984,6 @@
       await say(nm(bt.foe) + 'ป่าปรากฏตัว!');
       noteSeen();
     }
-    // with two or more monsters able to fight, the player picks who goes out first
-    if (G.party.filter((m) => m.hp > 0).length > 1) {
-      const pick = await pickMon('จะส่งตัวไหนออกไปสู้?', false);
-      bt.me = pick; bt.hp.me = pick.hp;
-    }
     tween(260, (t) => { bt.spr.me.dx = -220 * (1 - t); });
     await say('ลุยเลย ' + nm(bt.me) + '!');
 
@@ -1053,11 +1048,10 @@
       m.exp += amount;
       await say(nm(m) + 'ได้รับค่าประสบการณ์ ' + amount + ' แต้ม');
       while (m.level < 50 && m.exp >= expAt(m.level + 1)) {
-        const before = stats(m).hp;
         m.level++;
-        m.hp += stats(m).hp - before;
-        bt.hp.me = m.hp;
-        await say(nm(m) + 'เลเวลอัปเป็น Lv.' + m.level + '!');
+        m.hp = stats(m).hp;               // a level up restores all hit points
+        if (m === bt.me) bt.hp.me = m.hp;
+        await say(nm(m) + 'เลเวลอัปเป็น Lv.' + m.level + '!\nพลังชีวิตฟื้นเต็มแล้ว');
         for (const [lv, mv] of SPECIES[m.sp].moves) {
           if (lv === m.level && !m.moves.includes(mv)) await learnMove(m, mv);
         }
@@ -1319,7 +1313,7 @@
 
     if (result === 'win' && trainer) await say('ชนะ' + trainer.name + 'แล้ว!');
     if (result === 'win') {
-      const gold = trainer ? foes.reduce((n, m) => n + m.level, 0) * GOLD_TRAINER : foes[0].level * GOLD_WILD;
+      const gold = Math.round(trainer ? foes.reduce((n, m) => n + m.level, 0) * GOLD_TRAINER : foes[0].level * GOLD_WILD);
       G.gold += gold;
       await say('ได้รับเหรียญทอง ' + gold + ' ทอง!');
     }
