@@ -62,6 +62,23 @@
   #btnA { right: 0; top: 14px; background: rgba(224, 86, 47, 0.45); }
   #btnB { left: 0; bottom: 0; background: rgba(47, 134, 224, 0.40); }
   #btns button.down { background: rgba(255, 216, 102, 0.75); color: #2b2420; }
+  #authBox { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+             background: rgba(10, 12, 18, 0.6); }
+  #authBox[hidden] { display: none; }
+  #authBox form { width: min(340px, calc(100vw - 32px)); background: #fbf6e6; color: #2b2420; border-radius: 10px;
+                  border: 3px solid #5a5048; padding: 16px 18px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+                  font: 15px "Leelawadee UI", "Noto Sans Thai", Tahoma, sans-serif; }
+  #authBox h2 { font-size: 17px; margin: 0 0 12px; }
+  #authBox label { display: block; margin: 8px 0; font-size: 14px; }
+  #authBox input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px 10px;
+                   font: inherit; font-size: 16px; border: 2px solid #b8ab8c; border-radius: 6px; background: #fff; }
+  #authBox input:focus { outline: none; border-color: #e0782f; }
+  #authNote { min-height: 20px; margin: 8px 0; font-size: 13px; }
+  #authBox .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  #authBox button { flex: 1; padding: 9px 6px; font: inherit; font-size: 14px; font-weight: 600; border-radius: 6px;
+                    border: 2px solid #8a5a2a; background: #e0782f; color: #fff; cursor: pointer; }
+  #authBox button.ghost { background: transparent; color: #5a5048; border-color: #b8ab8c; }
+  #authBox button:disabled { opacity: 0.6; cursor: wait; }
   #btnSound { position: fixed; z-index: 6; top: calc(8px + env(safe-area-inset-top, 0px));
               left: calc(8px + env(safe-area-inset-left, 0px)); width: 38px; height: 38px; padding: 0;
               font-size: 18px; border-radius: 8px; color: #fff; cursor: pointer;
@@ -94,6 +111,20 @@
   </div>
   <button id="btnFull" type="button" aria-label="เต็มจอ">⛶</button>
 </div>
+<!-- login form for the online features (shown by js/online.js) -->
+<div id="authBox" hidden>
+  <form onsubmit="return false">
+    <h2>เข้าสู่ระบบ / สมัครสมาชิก</h2>
+    <label>ชื่อผู้ใช้ <input id="authUser" autocomplete="username" maxlength="16" placeholder="3-16 ตัวอักษร"></label>
+    <label>รหัสผ่าน <input id="authPass" type="password" autocomplete="current-password" maxlength="100" placeholder="อย่างน้อย 6 ตัว"></label>
+    <p id="authNote"></p>
+    <div class="row">
+      <button id="authLogin" type="button">เข้าสู่ระบบ</button>
+      <button id="authRegister" type="button">สมัครใหม่</button>
+      <button id="authCancel" type="button" class="ghost">ยกเลิก</button>
+    </div>
+  </form>
+</div>
 <!-- sound on / off (key M) -->
 <button id="btnSound" type="button" aria-label="เปิดหรือปิดเสียง">🔊</button>
 <!-- install the game as an app: shown on Windows when Edge / Chrome offers it -->
@@ -101,10 +132,11 @@
 <!-- auto-play bot for testing: off -> x1 -> x4 (key P) -->
 <button id="btnBot" type="button" hidden aria-label="บอทเล่นอัตโนมัติ" title="บอทเล่นอัตโนมัติ (ปุ่ม P)">บอท</button>
 <!-- raise ?v= whenever these files change, so browsers do not keep an old copy -->
-<script src="js/tiles.js?v=35"></script>
-<script src="js/data.js?v=35"></script>
-<script src="js/map.js?v=35"></script>
-<script src="js/audio.js?v=35"></script>
-<script src="js/game.js?v=35"></script>
+<script src="js/tiles.js?v=36"></script>
+<script src="js/data.js?v=36"></script>
+<script src="js/map.js?v=36"></script>
+<script src="js/audio.js?v=36"></script>
+<script src="js/online.js?v=36"></script>
+<script src="js/game.js?v=36"></script>
 </body>
 </html>

@@ -164,7 +164,9 @@
   function save() {
     if (!G || !pl) return;
     G.player = { map: MAP.id, c: pl.c, r: pl.r, dir: pl.dir };
+    G.savedAt = Date.now();
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(G)); } catch (e) { /* storage unavailable */ }
+    if (typeof ONLINE !== 'undefined') ONLINE.queueUpload(G);
   }
   function loadSave() {
     try {
@@ -275,7 +277,9 @@
     resize();
   }
 
+  const typing = (ev) => ONLINE.formOpen || (ev.target && /^(INPUT|TEXTAREA)$/.test(ev.target.tagName));
   window.addEventListener('keydown', (ev) => {
+    if (typing(ev)) return;
     const k = KEYMAP[ev.key];
     if (!k) return;
     ev.preventDefault();
@@ -313,7 +317,7 @@
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     let gp = null;
     for (const p of pads) if (p && p.connected) { gp = p; break; }
-    if (!gp) { setVirtualDir('stick', stick, null); return; }
+    if (!gp || ONLINE.formOpen) { setVirtualDir('stick', stick, null); return; }
     const down = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
     const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
     let dir = null;
@@ -1029,12 +1033,102 @@
     save();
   }
 
+  // ------------------------------------------------------------ online: account, cloud save, leaderboard
+  const STAGE_NAMES = ['ยังไม่ผ่านด่าน', 'ผ่านด่าน 1', 'ผ่านด่าน 2', 'ผ่านด่าน 3', 'ผ่านด่าน 4', 'ผ่านด่าน 5'];
+  const whenText = (iso) => { try { return new Date(iso).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return String(iso); } };
+  // run a network call with a "connecting" line on screen; returns null after showing the error
+  async function online(fn) {
+    ui.prompt = 'กำลังเชื่อมต่อเซิร์ฟเวอร์...\n(ถ้าเซิร์ฟเวอร์หลับอยู่ อาจใช้เวลาเกือบนาที)';
+    try { return await fn(); }
+    catch (e) { ui.prompt = null; await say('ออนไลน์ไม่สำเร็จ: ' + e.message); return null; }
+    finally { ui.prompt = null; }
+  }
+
+  async function leaderboardScreen() {
+    let by = 'progress';
+    for (;;) {
+      const data = await online(() => ONLINE.leaderboard(by));
+      if (!data) return;
+      const rows = data.rows.slice(0, 10);
+      const opts = rows.map((r) => ({ label: r.rank + '.  ' + r.username,
+        right: by === 'caught' ? 'จับได้ ' + r.caught + ' ชนิด' : STAGE_NAMES[r.stage] + ' · จับ ' + r.caught }));
+      if (!rows.length) opts.push({ label: 'ยังไม่มีใครอยู่ในตาราง', disabled: true });
+      opts.push({ label: by === 'caught' ? '⇄ ดูอันดับความคืบหน้า' : '⇄ ดูอันดับสะสมมอนสเตอร์' }, { label: 'กลับ' });
+      const me = data.me ? 'อันดับของคุณ : ' + data.me.rank + '   (' + (by === 'caught' ? 'จับได้ ' + data.me.caught + ' ชนิด' : STAGE_NAMES[data.me.stage]) + ')'
+                         : (ONLINE.loggedIn ? 'บันทึกเซฟขึ้นคลาวด์เพื่อเข้าตารางอันดับ' : 'เข้าสู่ระบบแล้วบันทึกเซฟเพื่อเข้าตารางอันดับ');
+      const i = await choose(opts, { x: 40, y: 8, w: 400, rowH: 22, cancellable: true, start: opts.length - 2,
+        title: by === 'caught' ? 'ตารางอันดับ : สะสมมอนสเตอร์' : 'ตารางอันดับ : ความคืบหน้า', footer: me });
+      if (i < 0 || i === opts.length - 1) return;
+      if (i === opts.length - 2) by = by === 'caught' ? 'progress' : 'caught';
+    }
+  }
+
+  // The online menu. On the title screen it can load the cloud save (returns that save to start
+  // from); in the game it can upload the current save.
+  async function onlineMenu(fromTitle) {
+    for (;;) {
+      if (!ONLINE.loggedIn) {
+        const i = await choose(['เข้าสู่ระบบ / สมัครสมาชิก', 'ตารางอันดับ', 'กลับ'], { x: 130, y: 96, w: 220, rowH: 26,
+          cancellable: true, title: 'ออนไลน์', footer: 'เซฟบนคลาวด์ เล่นต่อได้ทุกเครื่อง' });
+        if (i < 0 || i === 2) return null;
+        if (i === 1) { await leaderboardScreen(); continue; }
+        if (!(await ONLINE.form())) continue;
+        await say('เข้าสู่ระบบแล้ว สวัสดี ' + ONLINE.username + '!');
+        // first time on this device: see whether the account already keeps a save
+        const cloud = await online(() => ONLINE.download());
+        if (cloud && !cloud.save) {
+          if (!fromTitle) { await online(() => ONLINE.uploadNow(G)); await say('บันทึกเซฟนี้ขึ้นคลาวด์แล้ว\nต่อจากนี้เกมจะบันทึกขึ้นคลาวด์ให้อัตโนมัติ'); }
+          else await say('บัญชีนี้ยังไม่มีเซฟบนคลาวด์\nเริ่มเล่นแล้วเลือก "บันทึกขึ้นคลาวด์" ในเมนูทีม หรือที่หน้านี้');
+        } else if (cloud && cloud.save) {
+          await say('บัญชีนี้มีเซฟบนคลาวด์ (บันทึกเมื่อ ' + whenText(cloud.savedAt) + ')' +
+            (fromTitle ? '\nเลือก "โหลดเซฟจากคลาวด์" เพื่อเล่นต่อ' : '\nถ้าจะเล่นเซฟนั้น ให้กลับหน้าแรกแล้วเลือกโหลดเซฟจากคลาวด์'));
+        }
+        continue;
+      }
+      const opts = fromTitle
+        ? ['โหลดเซฟจากคลาวด์', 'อัปโหลดเซฟในเครื่องขึ้นคลาวด์', 'ตารางอันดับ', 'ออกจากระบบ', 'กลับ']
+        : ['บันทึกขึ้นคลาวด์ตอนนี้', 'ตารางอันดับ', 'ออกจากระบบ', 'กลับ'];
+      const i = await choose(opts, { x: 120, y: 70, w: 240, rowH: 26, cancellable: true,
+        title: 'ออนไลน์ : ' + ONLINE.username,
+        footer: ONLINE.linked ? 'บันทึกขึ้นคลาวด์อัตโนมัติ : เปิด' : 'ยังไม่ได้เชื่อมเซฟกับบัญชี' });
+      const what = i < 0 ? 'back' : opts[i];
+      if (what === 'กลับ' || what === 'back') return null;
+      if (what === 'ตารางอันดับ') { await leaderboardScreen(); continue; }
+      if (what === 'ออกจากระบบ') {
+        if (!(await yesNo('ออกจากระบบ ' + ONLINE.username + ' ใช่ไหม?'))) continue;
+        await online(() => ONLINE.logout());
+        await say('ออกจากระบบแล้ว (เซฟในเครื่องยังอยู่ครบ)');
+        continue;
+      }
+      if (what === 'โหลดเซฟจากคลาวด์') {
+        const cloud = await online(() => ONLINE.download());
+        if (!cloud) continue;
+        if (!cloud.save) { await say('บัญชีนี้ยังไม่มีเซฟบนคลาวด์'); continue; }
+        const local = loadSave();
+        if (!(await yesNo('โหลดเซฟบนคลาวด์ (บันทึกเมื่อ ' + whenText(cloud.savedAt) + ')' +
+          (local ? '\nเซฟในเครื่องนี้จะถูกแทนที่ ใช่ไหม?' : ' ใช่ไหม?')))) continue;
+        try { localStorage.setItem(SAVE_KEY, JSON.stringify(cloud.save)); } catch (e) { /* storage unavailable */ }
+        ONLINE.link(true);
+        return cloud.save;
+      }
+      // upload: the save in this browser (title) or the game being played
+      let save = fromTitle ? loadSave() : (save0(), G);
+      if (!save) { await say('ยังไม่มีเซฟในเครื่องนี้'); continue; }
+      const cloud = await online(() => ONLINE.download());
+      if (!cloud) continue;
+      if (cloud.save && !ONLINE.linked &&
+          !(await yesNo('บัญชีนี้มีเซฟบนคลาวด์อยู่แล้ว (บันทึกเมื่อ ' + whenText(cloud.savedAt) + ')\nจะเขียนทับด้วยเซฟนี้ ใช่ไหม?'))) continue;
+      if (await online(() => ONLINE.uploadNow(save))) await say('บันทึกขึ้นคลาวด์แล้ว!\nต่อจากนี้เกมจะบันทึกขึ้นคลาวด์ให้อัตโนมัติ');
+    }
+  }
+  const save0 = () => save();
+
   async function teamScreen() {
     let at = 0;
     for (;;) {
       const opts = G.party.map((m) => ({
         label: nm(m) + ' ' + rarityOf(m.sp).stars + '  Lv.' + m.level, badge: SPECIES[m.sp].type, hp: [m.hp, stats(m).hp] }));
-      opts.push({ label: 'ดูตารางแพ้ธาตุ' });
+      opts.push({ label: 'ดูตารางแพ้ธาตุ' }, { label: ONLINE.loggedIn ? 'ออนไลน์ / อันดับ (' + ONLINE.username + ')' : 'ออนไลน์ / อันดับ' });
       const i = await choose(opts, {
         x: 50, y: 24, w: 380, rowH: 30, cancellable: true, start: at,
         title: G.party.length ? 'ทีมมอนสเตอร์  (เลือกเพื่อดูข้อมูล)' : 'ยังไม่มีมอนสเตอร์ในทีม',
@@ -1046,6 +1140,7 @@
         ui.chart = true; await anyKey(); ui.chart = false;
         continue;
       }
+      if (i === G.party.length + 1) { await onlineMenu(false); continue; }
       const m = G.party[i];
       ui.card = m;                         // the monster's information card
       const pick = await choose(['ตั้งเป็นตัวนำ', 'กลับ'], { x: 212, y: 262, w: 220, cols: 2, rowH: 24, cancellable: true });
@@ -1923,10 +2018,27 @@
   async function title() {
     mode = 'title';
     AUDIO.music('village');
-    const saved = loadSave();
-    const i = await choose(saved ? ['เล่นต่อ', 'เริ่มเกมใหม่'] : ['เริ่มเกมใหม่'], { x: 165, y: 258, w: 150, rowH: 22 });
+    let start = null;                    // a save to play, or null for a new game
+    for (;;) {
+      const saved = loadSave();
+      const opts = (saved ? ['เล่นต่อ', 'เริ่มเกมใหม่'] : ['เริ่มเกมใหม่'])
+        .concat([ONLINE.loggedIn ? 'ออนไลน์ (' + ONLINE.username + ')' : 'ออนไลน์ / เซฟคลาวด์', 'ตารางอันดับ']);
+      const h = opts.length * 22 + 14;
+      const i = await choose(opts, { x: 145, y: 312 - h, w: 190, rowH: 22 });
+      const what = opts[i];
+      if (what === 'ตารางอันดับ') { await leaderboardScreen(); continue; }
+      if (what.startsWith('ออนไลน์')) {
+        const cloud = await onlineMenu(true);
+        if (cloud) { start = cloud; break; }
+        continue;
+      }
+      if (what === 'เล่นต่อ') start = saved;
+      else if (saved && !(await yesNo('เริ่มเกมใหม่ เซฟเดิมในเครื่องนี้จะถูกแทนที่ ใช่ไหม?'))) continue;
+      if (!start) ONLINE.link(false);     // a new game is not linked to the account until uploaded
+      break;
+    }
     await fadeTo(1, 250);
-    if (saved && i === 0) G = saved; else newGame();
+    if (start) G = start; else newGame();
     upgradeSave();
     startWorld();
     await fadeTo(0, 250);
@@ -1972,7 +2084,7 @@
     const show = () => { if (btn) { btn.textContent = AUDIO.on ? '🔊' : '🔇'; btn.title = AUDIO.on ? 'ปิดเสียง (M)' : 'เปิดเสียง (M)'; } };
     const flip = () => { AUDIO.toggle(); show(); };
     if (btn) btn.addEventListener('click', (ev) => { ev.preventDefault(); flip(); btn.blur(); });
-    window.addEventListener('keydown', (ev) => { if ((ev.key === 'm' || ev.key === 'M') && !ev.repeat) flip(); });
+    window.addEventListener('keydown', (ev) => { if ((ev.key === 'm' || ev.key === 'M') && !ev.repeat && !typing(ev)) flip(); });
     show();
   }
 
@@ -1986,7 +2098,7 @@
     if (/[?&]bot(&|=|$)/.test(location.search)) {
       botBtn.hidden = false;
       botBtn.addEventListener('click', (ev) => { ev.preventDefault(); cycleBot(); botBtn.blur(); });
-      window.addEventListener('keydown', (ev) => { if ((ev.key === 'p' || ev.key === 'P') && !ev.repeat) cycleBot(); });
+      window.addEventListener('keydown', (ev) => { if ((ev.key === 'p' || ev.key === 'P') && !ev.repeat && !typing(ev)) cycleBot(); });
     }
     resize();
     requestAnimationFrame(frame);
