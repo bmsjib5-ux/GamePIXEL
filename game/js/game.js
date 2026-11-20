@@ -221,6 +221,7 @@
     document.getElementById('nameTitle').textContent = title;
     document.getElementById('nameHint').textContent = hint || '';
     input.maxLength = maxLen; input.value = value || '';
+    input.placeholder = 'สูงสุด ' + maxLen + ' ตัวอักษร';
     box.hidden = false; textOpen = true;
     setTimeout(() => { input.focus(); input.select(); }, 30);
     return new Promise((resolve) => {
@@ -1089,22 +1090,26 @@
     finally { ui.prompt = null; }
   }
 
-  async function leaderboardScreen() {
-    let by = 'progress';
+  async function leaderboardScreen(start) {
+    let by = start || 'progress';
+    const NEXT = { progress: 'caught', caught: 'pvp', pvp: 'progress' };
+    const TITLE = { progress: 'ความคืบหน้า', caught: 'สะสมมอนสเตอร์', pvp: 'นักสู้ออนไลน์' };
     for (;;) {
       const data = await online(() => ONLINE.leaderboard(by));
       if (!data) return;
       const rows = data.rows.slice(0, 10);
-      const opts = rows.map((r) => ({ label: r.rank + '.  ' + r.username,
-        right: by === 'caught' ? 'จับได้ ' + r.caught + ' ชนิด' : STAGE_NAMES[r.stage] + ' · จับ ' + r.caught }));
+      const rightOf = (r) => by === 'pvp' ? 'คะแนน ' + r.rating + ' · ชนะ ' + r.wins + ' แพ้ ' + r.losses
+        : by === 'caught' ? 'จับได้ ' + r.caught + ' ชนิด' : STAGE_NAMES[r.stage] + ' · จับ ' + r.caught;
+      const opts = rows.map((r) => ({ label: r.rank + '.  ' + r.username, right: rightOf(r) }));
       if (!rows.length) opts.push({ label: 'ยังไม่มีใครอยู่ในตาราง', disabled: true });
-      opts.push({ label: by === 'caught' ? '⇄ ดูอันดับความคืบหน้า' : '⇄ ดูอันดับสะสมมอนสเตอร์' }, { label: 'กลับ' });
-      const me = data.me ? 'อันดับของคุณ : ' + data.me.rank + '   (' + (by === 'caught' ? 'จับได้ ' + data.me.caught + ' ชนิด' : STAGE_NAMES[data.me.stage]) + ')'
+      opts.push({ label: '⇄ ดูอันดับ' + TITLE[NEXT[by]] }, { label: 'กลับ' });
+      const me = data.me ? 'อันดับของคุณ : ' + data.me.rank + '   (' + rightOf(data.me) + ')'
+                         : by === 'pvp' ? 'ต่อสู้ออนไลน์เพื่อเข้าตารางนี้'
                          : (ONLINE.loggedIn ? 'บันทึกเซฟขึ้นคลาวด์เพื่อเข้าตารางอันดับ' : 'เข้าสู่ระบบแล้วบันทึกเซฟเพื่อเข้าตารางอันดับ');
       const i = await choose(opts, { x: 40, y: 8, w: 400, rowH: 22, cancellable: true, start: opts.length - 2,
-        title: by === 'caught' ? 'ตารางอันดับ : สะสมมอนสเตอร์' : 'ตารางอันดับ : ความคืบหน้า', footer: me });
+        title: 'ตารางอันดับ : ' + TITLE[by], footer: me });
       if (i < 0 || i === opts.length - 1) return;
-      if (i === opts.length - 2) by = by === 'caught' ? 'progress' : 'caught';
+      if (i === opts.length - 2) by = NEXT[by];
     }
   }
 
@@ -1132,7 +1137,7 @@
       }
       const opts = fromTitle
         ? ['โหลดเซฟจากคลาวด์', 'อัปโหลดเซฟในเครื่องขึ้นคลาวด์', 'ตารางอันดับ', 'ออกจากระบบ', 'กลับ']
-        : ['บันทึกขึ้นคลาวด์ตอนนี้', 'แลกเปลี่ยนมอนสเตอร์', 'ตารางอันดับ', 'ออกจากระบบ', 'กลับ'];
+        : ['บันทึกขึ้นคลาวด์ตอนนี้', 'ต่อสู้ออนไลน์', 'แลกเปลี่ยนมอนสเตอร์', 'ตารางอันดับ', 'ออกจากระบบ', 'กลับ'];
       const i = await choose(opts, { x: 120, y: 70, w: 240, rowH: 26, cancellable: true,
         title: 'ออนไลน์ : ' + ONLINE.username,
         footer: ONLINE.linked ? 'บันทึกขึ้นคลาวด์อัตโนมัติ : เปิด' : 'ยังไม่ได้เชื่อมเซฟกับบัญชี' });
@@ -1140,6 +1145,7 @@
       if (what === 'กลับ' || what === 'back') return null;
       if (what === 'ตารางอันดับ') { await leaderboardScreen(); continue; }
       if (what === 'แลกเปลี่ยนมอนสเตอร์') { await tradeMenu(); continue; }
+      if (what === 'ต่อสู้ออนไลน์') { await fightMenu(); continue; }
       if (what === 'ออกจากระบบ') {
         if (!(await yesNo('ออกจากระบบ ' + ONLINE.username + ' ใช่ไหม?'))) continue;
         await online(() => ONLINE.logout());
@@ -1267,6 +1273,248 @@
         await say('ยกเลิกแล้ว ' + monText(r.mon) + 'กลับมาอยู่ใน' + where);
       }
     }
+  }
+
+  // ---- fighting other players: challenge the team they saved to the cloud (the game plays
+  // their side). Nothing is gained or lost: no exp, gold, items or evolution, and the team's
+  // hit points are put back as they were afterwards. Only the fighters' rating changes.
+  async function challengeMenu() {
+    const data = await online(() => ONLINE.pvpOpponents());
+    if (!data) return;
+    if (!data.rows.length) { await say('ยังไม่มีผู้เล่นคนอื่นบันทึกทีมขึ้นคลาวด์\nชวนเพื่อนมาเล่นแล้วบันทึกเซฟขึ้นคลาวด์สิ'); return; }
+    const rows = data.rows.slice(0, 10);
+    const opts = rows.map((r) => ({ label: r.username, right: 'คะแนน ' + r.rating + ' · ทีม ' + r.size + ' ตัว Lv.≤' + r.top }));
+    opts.push({ label: 'กลับ' });
+    const me = data.me;
+    const i = await choose(opts, { x: 30, y: 8, w: 420, rowH: 22, cancellable: true, title: 'เลือกคู่ต่อสู้ (คะแนนใกล้เคียงขึ้นก่อน)',
+      footer: 'คะแนนของคุณ ' + me.rating + '   ชนะ ' + me.wins + ' · แพ้ ' + me.losses });
+    if (i < 0 || i === rows.length) return;
+    const t = await online(() => ONLINE.pvpTeam(rows[i].username));
+    if (!t) return;
+    const foes = t.team.filter(knownMon).map((m) => {
+      const mon = { sp: m.sp, level: m.level, exp: m.exp, hp: 0, moves: m.moves.slice() };
+      if (m.nick) mon.nick = m.nick;
+      mon.hp = stats(mon).hp;
+      return mon;
+    });
+    if (!foes.length) { await say('ทีมของผู้เล่นนี้มีมอนสเตอร์ที่เกมเวอร์ชันนี้ยังไม่รู้จัก\nรีเฟรชหน้าเกมแล้วลองใหม่'); return; }
+    await say('ทีมของ ' + t.username + ' (คะแนน ' + t.rating + ')\n' + foes.map((m) => nm(m) + ' Lv.' + m.level).join(', '));
+    if (!(await yesNo('ท้าประลองกับ ' + t.username + ' ไหม?\n(ไม่ได้ exp/ทอง ไม่เสียอะไร มอนสเตอร์ฟื้นเต็มก่อนสู้)'))) return;
+    const keep = G.party.map((m) => m.hp);
+    healParty();
+    const result = await battle(foes, { name: t.username, sheet: 'chars/hero' }, { pvp: true });
+    G.party.forEach((m, k) => { m.hp = keep[k]; });
+    save();
+    const r = await online(() => ONLINE.pvpResult(t.username, result === 'win'));
+    if (!r) return;
+    if (!r.counted) await say('ผลครั้งนี้ไม่นับคะแนน (สู้กับคนเดิมซ้ำภายใน 5 นาที)\nคะแนนของคุณ ' + r.rating);
+    else await say((result === 'win' ? 'ชนะ! ' : 'แพ้... ') + 'คะแนน ' + (r.delta >= 0 ? '+' : '') + r.delta + '  เป็น ' + r.rating);
+  }
+  async function fightMenu() {
+    for (;;) {
+      const i = await choose(['ท้าทีมผู้เล่นอื่น', 'สู้สดกับเพื่อน (เรียลไทม์)', 'อันดับนักสู้', 'กลับ'],
+        { x: 120, y: 80, w: 240, rowH: 28, cancellable: true, title: 'ต่อสู้ออนไลน์' });
+      if (i < 0 || i === 3) return;
+      if (i === 0) await challengeMenu();
+      else if (i === 1) await liveMenu();
+      else await leaderboardScreen('pvp');
+    }
+  }
+  // ---- live battles: both players online, the server runs the battle. Each side picks a move,
+  // a switch or forfeits; the server resolves the turn and both play back the same events.
+  const liveTeam = () => G.party.map((m) => ({ sp: m.sp, level: m.level, moves: m.moves.slice(), nick: m.nick }));
+  async function liveMenu() {
+    if (!G.party.length) { await say('ต้องมีมอนสเตอร์ในทีมก่อน'); return; }
+    const i = await choose(['สร้างห้อง (ได้รหัสให้เพื่อน)', 'เข้าห้องด้วยรหัส', 'กลับ'],
+      { x: 110, y: 80, w: 260, rowH: 28, cancellable: true, title: 'สู้สดกับเพื่อน',
+        footer: 'ทั้งสองฝ่ายต้องออนไลน์พร้อมกัน · ตาละ 60 วินาที' });
+    if (i < 0 || i === 2) return;
+    if (i === 0) {
+      const r = await online(() => ONLINE.liveCreate(liveTeam()));
+      if (!r) return;
+      // wait for the friend, with a "cancel" button; a join closes the menu by itself
+      let joined = false, cancelled = false;
+      const menu = choose(['ยกเลิกห้อง'], { x: 120, y: 110, w: 240, rowH: 28,
+        title: 'รหัสห้อง : ' + r.code, footer: 'บอกรหัสนี้ให้เพื่อน แล้วรอเพื่อนเข้าห้อง...' })
+        .then((k) => { if (k !== -2) cancelled = true; });
+      let seq = 0;
+      const gaveUp = menu.then(() => null);
+      while (!joined && !cancelled) {
+        let p = null;
+        try { p = await Promise.race([ONLINE.livePoll(r.room, seq), gaveUp]); } catch (e) { await wait(2000); continue; }
+        if (!p) break;                                   // "cancel" was pressed
+        seq = p.seq;
+        if (p.view.phase !== 'waiting') joined = true;
+      }
+      if (cancelled) { try { await ONLINE.liveAct(r.room, { kind: 'forfeit' }); } catch (e) { /* the room expires anyway */ } return; }
+      if (ui.menu) { const m = ui.menu; ui.menu = null; m.resolve(-2); }
+      await menu;
+      await liveBattle(r.room);
+    } else {
+      const code = await askText('ใส่รหัสห้อง', '', 6, 'รหัส 5 ตัวที่เพื่อนบอก');
+      if (!code) return;
+      const r = await online(() => ONLINE.liveJoin(code.toUpperCase().replace(/\s/g, ''), liveTeam()));
+      if (r) await liveBattle(r.room);
+    }
+  }
+
+  async function liveBattle(room) {
+    const live = { seq: 0, view: null, names: ['', ''], over: false };
+    const monOf = (p) => ({ sp: p.sp, level: p.level, nick: p.nick, exp: expAt(p.level), moves: [], hp: p.hp });
+    const sideOf = (w) => (w === live.view.you ? 'me' : 'foe');
+    // the first state tells which monsters are out, so the battle screen has something to draw
+    let first = null;
+    for (let i = 0; i < 5 && !first; i++) {
+      try { first = await online(() => ONLINE.livePoll(room, 0)); } catch (e) { first = null; }
+      if (!first) return;
+    }
+    live.view = first.view;
+    for (let i = 0; i < 2; i++) { await tween(90, (t) => { ui.flash = t; }); await tween(90, (t) => { ui.flash = 1 - t; }); }
+    await fadeTo(1, 220);
+    const mine0 = first.view.team.find((m) => m.active) || first.view.team[0];
+    bt = { me: monOf(mine0), foe: monOf(first.view.foe), foes: [], trainer: { name: '', sheet: 'chars/hero' },
+           hp: { me: mine0.hp, foe: first.view.foe.hp },
+           spr: { me: { dx: -220, dy: 0, alpha: 1, blink: false }, foe: { dx: 220, dy: 0, alpha: 1, blink: false } },
+           trainerX: null, capsule: null, showMe: true, showFoe: true, fx: null, evo: null, evolving: [], pop: null,
+           round: 0, ready: new Map(), live: true };
+    mode = 'battle';
+    AUDIO.music('trainer');
+    live.names = first.view.names || ['', ''];
+    const foeName = () => live.names[1 - live.view.you] || 'คู่แข่ง';
+    bt.trainer.name = foeName();
+    await fadeTo(0, 220);
+    const pending = first.events;                      // played by the loop below
+    async function playEvent(e) {
+      if (e.type === 'start') { live.names = e.names; bt.trainer.name = foeName(); return; }
+      if (e.type === 'switch') {
+        const side = sideOf(e.side), m = monOf(e.mon);
+        if (bt[side] && !e.first) await tween(220, (t) => { bt.spr[side].dx = (side === 'me' ? -220 : 220) * t; });
+        bt[side] = m; bt.hp[side] = m.hp;
+        bt.spr[side] = { dx: side === 'me' ? -220 : 220, dy: 0, alpha: 1, blink: false };
+        await tween(260, (t) => { bt.spr[side].dx = (side === 'me' ? -220 : 220) * (1 - t); });
+        await say(side === 'me' ? '{ชื่อ} : ลุยเลย ' + nm(m) + '!' : foeName() + ' ส่ง' + nm(m) + 'ออกมา!');
+        return;
+      }
+      if (e.type === 'move') {
+        const side = sideOf(e.side), other = side === 'me' ? 'foe' : 'me', mv = MOVES[e.move];
+        const s = bt.spr[side], hit = bt.spr[other], dir = side === 'me' ? 1 : -1;
+        await say((side === 'me' ? nm(bt.me) : nm(bt.foe) + 'ของ' + foeName()) + 'ใช้ท่า' + mv.name + '!');
+        await tween(110, (t) => { s.dx = dir * 20 * t; s.dy = -dir * 9 * t; });
+        await tween(110, (t) => { s.dx = dir * 20 * (1 - t); s.dy = -dir * 9 * (1 - t); });
+        bt.fx = { type: mv.type, x: SPOT[other].x, y: SPOT[other].y - 60, t: 0, strong: e.eff > 1 };
+        AUDIO.sfx('attack');
+        await tween(e.eff > 1 ? 520 : 440, (t) => {
+          bt.fx.t = t;
+          hit.dx = t > 0.25 && t < 0.9 ? Math.round(Math.sin(t * 46) * (e.eff > 1 ? 5 : 3)) : 0;
+          if (e.eff > 1) ui.flash = t > 0.3 && t < 0.42 ? 0.35 : 0;
+        });
+        bt.fx = null; hit.dx = 0; ui.flash = 0;
+        AUDIO.sfx(e.eff > 1 ? 'hitStrong' : e.eff < 1 ? 'hitWeak' : 'hit');
+        await tween(240, (t) => { hit.blink = Math.floor(t * 4) % 2 === 0; });
+        hit.blink = false;
+        const from = bt.hp[other];
+        bt[other].hp = e.hp;
+        bt.pop = { text: '-' + e.dmg, x: SPOT[other].x + (other === 'foe' ? -58 : 62), y: SPOT[other].y - 96, t: 0,
+                   color: e.eff > 1 ? '#ffd23f' : e.eff < 1 ? '#c8c8d0' : '#ffffff', big: e.eff > 1 };
+        tween(900, (t) => { if (bt && bt.pop) bt.pop.t = t; }).then(() => { if (bt) bt.pop = null; });
+        await tween(350, (t) => { bt.hp[other] = from + (e.hp - from) * t; });
+        if (e.eff > 1) await say('ได้ผลดีเยี่ยม!'); else if (e.eff < 1) await say('ไม่ค่อยได้ผล...');
+        return;
+      }
+      if (e.type === 'faint') {
+        const side = sideOf(e.side), s = bt.spr[side];
+        AUDIO.sfx('faint');
+        await tween(420, (t) => { s.dy = 46 * t; s.alpha = 1 - t; });
+        await say((side === 'me' ? nm(bt.me) : nm(bt.foe) + 'ของ' + foeName()) + 'หมดแรง!');
+        return;
+      }
+      if (e.type === 'end') {
+        live.over = true;
+        const won = e.winner === live.view.you;
+        if (e.winner === null) await say('เสมอกัน!');
+        else {
+          if (won) { AUDIO.music(null); AUDIO.sfx('victory'); }
+          await say(e.how === 'forfeit' ? (won ? foeName() + ' ยอมแพ้ คุณชนะ!' : 'คุณยอมแพ้') : (won ? 'ชนะ ' + foeName() + ' แล้ว!' : 'แพ้ ' + foeName() + '...'));
+        }
+        return;
+      }
+      if (e.type === 'rating') {
+        const mine = Object.values(e.ratings).find((r) => (live.view.winner === live.view.you ? r.delta > 0 : r.delta < 0));
+        if (mine) await say('คะแนนนักสู้ ' + (mine.delta >= 0 ? '+' : '') + mine.delta + '  เป็น ' + mine.rating);
+      }
+    }
+    // the player's turn: fight, switch or give up
+    async function chooseAction(v) {
+      for (;;) {
+        ui.prompt = nm(bt.me) + 'จะทำอะไรดี?  (เหลือ ' + Math.max(0, Math.round((v.deadline - Date.now()) / 1000)) + ' วินาที)';
+        const k = await choose(['ต่อสู้', 'เปลี่ยนตัว', 'ยอมแพ้'], { x: 262, y: 236, w: 214, cols: 2, rowH: 33, kind: 'act' });
+        ui.prompt = null;
+        if (k === 0) {
+          const ids = v.moves.map((x) => x.id);
+          if (v.allResting) ids.push('tackle');
+          const opts = ids.map((id, n) => {
+            const o = moveOption(id, bt.foe), x = v.moves[n];
+            if (x && x.left) { o.disabled = true; o.sub = 'พร้อมใช้ในอีก ' + x.left + ' เทิร์น'; o.subColor = '#a39c8c'; }
+            else if (x && x.cd) o.sub += '  · พัก ' + x.cd;
+            if (!x) o.label += ' (ท่าพื้นฐาน)';
+            return o;
+          });
+          const i = await choose(opts, { x: 4, y: 236, w: 472, cols: 2, rowH: 33, minH: 80, cancellable: true, kind: 'move', data: ids });
+          if (i < 0) continue;
+          return { kind: 'move', move: ids[i] };
+        }
+        if (k === 1) {
+          const opts = v.team.map((m) => ({ label: (m.nick || SPECIES[m.sp].name) + '  Lv.' + m.level, badge: SPECIES[m.sp].type,
+            hp: [m.hp, m.max], disabled: m.hp <= 0 || m.active }));
+          if (opts.every((o) => o.disabled)) { await say('ไม่มีตัวอื่นที่สู้ไหวแล้ว'); continue; }
+          const i = await choose(opts, { x: 50, y: 24, w: 380, rowH: 30, cancellable: true, title: 'จะเปลี่ยนเป็นตัวไหน?', kind: 'mon' });
+          if (i < 0) continue;
+          return { kind: 'switch', idx: i };
+        }
+        if (await yesNo('ยอมแพ้การต่อสู้นี้ใช่ไหม?')) return { kind: 'forfeit' };
+      }
+    }
+    async function chooseNext(v) {
+      const opts = v.team.map((m) => ({ label: (m.nick || SPECIES[m.sp].name) + '  Lv.' + m.level, badge: SPECIES[m.sp].type,
+        hp: [m.hp, m.max], disabled: m.hp <= 0 }));
+      const i = await choose(opts, { x: 50, y: 24, w: 380, rowH: 30, title: 'จะส่งตัวไหนออกไปสู้ต่อ?', kind: 'mon' });
+      return { kind: 'switch', idx: i };
+    }
+
+    let failures = 0, lastActRound = -1, queued = { seq: first.seq, events: pending, view: first.view };
+    while (!live.over) {
+      let p;
+      if (queued) { p = queued; queued = null; }
+      else try { p = await ONLINE.livePoll(room, live.seq); failures = 0; }
+      catch (e) {
+        if (++failures >= 5) { await say('การเชื่อมต่อขาดหาย: ' + e.message); break; }
+        ui.prompt = 'กำลังเชื่อมต่อใหม่...'; await wait(1500); ui.prompt = null; continue;
+      }
+      live.view = p.view;
+      for (const e of p.events) { live.seq = e.seq; await playEvent(e); if (live.over) break; }
+      if (live.over) break;
+      const v = p.view;
+      const key = v.phase + ':' + v.round;
+      if (v.waitingFor === 'you' && key !== lastActRound) {
+        const a = v.phase === 'switch' ? await chooseNext(v) : await chooseAction(v);
+        try { await ONLINE.liveAct(room, a); lastActRound = key; } catch (e) { await say(e.message); }
+        if (a.kind !== 'forfeit') ui.prompt = 'รอ ' + foeName() + ' เลือก...';
+      }
+    }
+    // the rating arrives a moment after the end
+    for (let i = 0; i < 3 && live.over; i++) {
+      try {
+        const p = await ONLINE.livePoll(room, live.seq);
+        const r = p.events.find((e) => e.type === 'rating');
+        if (r) { live.view = p.view; await playEvent(r); break; }
+      } catch (e) { break; }
+      await wait(800);
+    }
+    ui.prompt = null;
+    await fadeTo(1, 240);
+    bt = null; mode = 'world';
+    mapMusic();
+    await fadeTo(0, 240);
   }
 
   async function teamScreen() {
@@ -1543,7 +1791,7 @@
     // After the foe falls. Returns true when the battle is won.
     async function afterFoeFaint() {
       await faint('foe');
-      await gainExp(bt.me, Math.floor(50 * bt.foe.level / 5 * (trainer ? 1.5 : 1)));
+      if (!opts.pvp) await gainExp(bt.me, Math.floor(50 * bt.foe.level / 5 * (trainer ? 1.5 : 1)));
       const next = bt.foes.find((m) => m.hp > 0);
       if (!next) return true;
       bt.foe = next; bt.hp.foe = next.hp;
@@ -1728,6 +1976,7 @@
           await foeTurn();
         }
       } else if (what === 'heal') {
+        if (opts.pvp) { await say('ใช้ไอเทมในการประลองออนไลน์ไม่ได้'); continue; }
         const max = stats(bt.me).hp;
         if (itemCount('heal') && bt.me.hp >= max) { await say(nm(bt.me) + 'ยังแข็งแรงเต็มที่อยู่'); continue; }
         const med = await pickItem('heal');
@@ -1749,21 +1998,22 @@
 
     if (result === 'win') { AUDIO.music(null); AUDIO.sfx('victory'); }
     if (result === 'win' && trainer) await say('ชนะ' + trainer.name + 'แล้ว!');
-    if (result === 'win') {
+    if (result === 'win' && !opts.pvp) {
       const gold = Math.round(trainer ? foes.reduce((n, m) => n + m.level, 0) * GOLD_TRAINER : foes[0].level * GOLD_WILD);
       G.gold += gold;
       AUDIO.sfx('coin');
       await say('ได้รับเหรียญทอง ' + gold + ' ทอง!');
     }
-    if (result !== 'lose') {
+    if (result !== 'lose' && !opts.pvp) {
       for (const m of G.party) if (m.hp > 0 && canEvolve(m) && !bt.evolving.includes(m)) bt.evolving.push(m);
       for (const m of bt.evolving) await evolve(m);
     }
-    if (result === 'lose') await say('ไม่มีมอนสเตอร์ที่สู้ไหวแล้ว...\nคุณรีบพามอนสเตอร์กลับไปที่ศูนย์รักษา');
+    if (result === 'lose' && opts.pvp) await say('แพ้' + trainer.name + '... ไว้ฝึกแล้วกลับมาแก้มือใหม่!');
+    if (result === 'lose' && !opts.pvp) await say('ไม่มีมอนสเตอร์ที่สู้ไหวแล้ว...\nคุณรีบพามอนสเตอร์กลับไปที่ศูนย์รักษา');
     await fadeTo(1, 240);
     bt = null; mode = 'world';
     mapMusic();
-    if (result === 'lose') {
+    if (result === 'lose' && !opts.pvp) {
       healParty();
       const spot = G.healSpot || HEAL_SPOT;
       setMap(spot.map);
@@ -1771,7 +2021,7 @@
     }
     save();
     await fadeTo(0, 240);
-    if (result === 'lose') await say('พยาบาลช่วยฟื้นพลังให้มอนสเตอร์ทุกตัวแล้ว');
+    if (result === 'lose' && !opts.pvp) await say('พยาบาลช่วยฟื้นพลังให้มอนสเตอร์ทุกตัวแล้ว');
     return result;
   }
   function noteSeen() { /* reserved for a monster journal */ }

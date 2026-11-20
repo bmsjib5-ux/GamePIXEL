@@ -14,6 +14,11 @@
 //   POST /api/trades/:code/accept (auth) {mon} -> {mon}         give mine, get theirs
 //   POST /api/trades/:code/cancel (auth)       -> {mon}         my open offer back
 //   POST /api/trades/:code/claim  (auth)       -> {mon}         collect what I was given
+//   GET  /api/pvp/opponents (auth)             -> {me, rows}    players whose team can be challenged
+//   GET  /api/pvp/team/:name (auth)            -> {username, rating, team}
+//   POST /api/pvp/result (auth) {opponent, won}-> {rating, delta}
+//   GET  /api/leaderboard?by=pvp               -> fighters by rating
+//   /api/live/...                              live battles (see live.js)
 //   GET  /health                               -> ok
 //
 // "auth" means the header  Authorization: Bearer <token>.
@@ -27,6 +32,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
+const live = require('./live');
 const PORT = Number(process.env.PORT) || 3000;
 const ORIGINS = (process.env.ALLOWED_ORIGINS || '*').split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_BODY = 512 * 1024;          // a save is a few kilobytes; this leaves plenty of room
@@ -63,7 +69,7 @@ function scoreOf(save) {
 // ------------------------------------------------------------------ storage
 // Both stores offer the same calls.
 function fileStore(file) {
-  let db = { users: [], sessions: [], saves: {}, trades: [] };
+  let db = { users: [], sessions: [], saves: {}, trades: [], pvp: {} };
   try { db = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { /* first run */ }
   const write = () => fs.writeFileSync(file, JSON.stringify(db, null, 1));
   return {
@@ -93,6 +99,30 @@ function fileStore(file) {
       return rows.slice(0, limit);
     },
     async allRanked(by) { return this.leaderboard(by, 1e9); },
+    // fighters
+    async pvpOf(userId) { db.pvp = db.pvp || {}; return db.pvp[userId] || { rating: 1000, wins: 0, losses: 0 }; },
+    async setPvp(userId, p) { db.pvp = db.pvp || {}; db.pvp[userId] = { rating: p.rating, wins: p.wins, losses: p.losses }; write(); },
+    async opponents(userId) {
+      db.pvp = db.pvp || {};
+      return Object.entries(db.saves).filter(([uid]) => Number(uid) !== Number(userId)).map(([uid, s]) => {
+        const u = db.users.find((x) => x.id === Number(uid)) || {};
+        const p = db.pvp[uid] || { rating: 1000, wins: 0, losses: 0 };
+        return { username: u.username, party: (s.data || {}).party, rating: p.rating, wins: p.wins, losses: p.losses, updated_at: s.updated_at };
+      });
+    },
+    async teamOf(name) {
+      const u = db.users.find((x) => x.username.toLowerCase() === String(name).toLowerCase());
+      const s = u && db.saves[u.id];
+      if (!s) return null;
+      const p = (db.pvp || {})[u.id] || { rating: 1000 };
+      return { user_id: u.id, username: u.username, party: (s.data || {}).party, rating: p.rating };
+    },
+    async pvpBoard(limit) {
+      db.pvp = db.pvp || {};
+      return Object.entries(db.pvp).map(([uid, p]) => ({ username: (db.users.find((u) => u.id === Number(uid)) || {}).username,
+        rating: p.rating, wins: p.wins, losses: p.losses, user_id: Number(uid) }))
+        .sort((a, b) => b.rating - a.rating || b.wins - a.wins).slice(0, limit);
+    },
     // trades
     async tradeByCode(code) { return (db.trades || []).find((t) => t.code === code) || null; },
     async openTradesOf(userId) { return (db.trades || []).filter((t) => t.owner_id === userId && t.status === 'open').length; },
@@ -161,6 +191,10 @@ function pgStore(url) {
                  claimed BOOLEAN NOT NULL DEFAULT false,
                  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), accepted_at TIMESTAMPTZ)`);
       await q('CREATE INDEX IF NOT EXISTS trades_owner ON trades (owner_id)');
+      await q(`CREATE TABLE IF NOT EXISTS pvp (
+                 user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                 rating INT NOT NULL DEFAULT 1000, wins INT NOT NULL DEFAULT 0, losses INT NOT NULL DEFAULT 0,
+                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
     },
     async userByName(name) {
       const r = await q('SELECT * FROM users WHERE lower(username) = lower($1)', [name]); return r.rows[0] || null;
@@ -194,6 +228,34 @@ function pgStore(url) {
     async allRanked(by) {
       const r = await q(`SELECT s.user_id, s.stage, s.caught, s.level, s.badges, s.updated_at FROM saves s
                          ORDER BY ${order(by)}`);
+      return r.rows;
+    },
+    // fighters
+    async pvpOf(userId) {
+      const r = await q('SELECT rating, wins, losses FROM pvp WHERE user_id = $1', [userId]);
+      return r.rows[0] || { rating: 1000, wins: 0, losses: 0 };
+    },
+    async setPvp(userId, p) {
+      await q(`INSERT INTO pvp (user_id, rating, wins, losses, updated_at) VALUES ($1, $2, $3, $4, now())
+               ON CONFLICT (user_id) DO UPDATE SET rating = $2, wins = $3, losses = $4, updated_at = now()`,
+              [userId, p.rating, p.wins, p.losses]);
+    },
+    async opponents(userId) {
+      const r = await q(`SELECT u.username, s.data->'party' AS party, s.updated_at,
+                           COALESCE(p.rating, 1000) AS rating, COALESCE(p.wins, 0) AS wins, COALESCE(p.losses, 0) AS losses
+                         FROM saves s JOIN users u ON u.id = s.user_id LEFT JOIN pvp p ON p.user_id = s.user_id
+                         WHERE s.user_id <> $1 ORDER BY s.updated_at DESC LIMIT 200`, [userId]);
+      return r.rows;
+    },
+    async teamOf(name) {
+      const r = await q(`SELECT u.id AS user_id, u.username, s.data->'party' AS party, COALESCE(p.rating, 1000) AS rating
+                         FROM users u JOIN saves s ON s.user_id = u.id LEFT JOIN pvp p ON p.user_id = u.id
+                         WHERE lower(u.username) = lower($1)`, [name]);
+      return r.rows[0] || null;
+    },
+    async pvpBoard(limit) {
+      const r = await q(`SELECT u.username, p.rating, p.wins, p.losses, p.user_id FROM pvp p JOIN users u ON u.id = p.user_id
+                         ORDER BY p.rating DESC, p.wins DESC LIMIT $1`, [limit]);
       return r.rows;
     },
     // trades: each change is one statement, so two players can never take the same offer
@@ -293,6 +355,11 @@ function cleanMon(m) {
   return out;
 }
 
+// fighting: a saved team, cleaned (at most 6), and Elo ratings
+const ELO_K = 32, FIGHT_COOLDOWN_MS = 5 * 60 * 1000;
+const recentFights = new Map();
+const cleanTeam = (party) => (Array.isArray(party) ? party : []).map(cleanMon).filter(Boolean).slice(0, 6);
+
 // usernames: 3-16 letters (Thai or English), digits or _
 const NAME_OK = /^[A-Za-z0-9_฀-๿]{3,16}$/;
 
@@ -325,6 +392,17 @@ async function handle(req, res) {
     return send(res, 200, { token, username: user.username });
   }
 
+  if (route === 'GET /api/leaderboard' && url.searchParams.get('by') === 'pvp') {
+    const all = await store.pvpBoard(1000);
+    const rows = all.slice(0, 20).map((r, i) => ({ rank: i + 1, username: r.username, rating: r.rating, wins: r.wins, losses: r.losses }));
+    const user = await currentUser(req);
+    let me = null;
+    if (user) {
+      const at = all.findIndex((r) => Number(r.user_id) === Number(user.id));
+      if (at >= 0) me = { rank: at + 1, username: user.username, rating: all[at].rating, wins: all[at].wins, losses: all[at].losses };
+    }
+    return send(res, 200, { by: 'pvp', rows, me });
+  }
   if (route === 'GET /api/leaderboard') {
     const by = url.searchParams.get('by') === 'caught' ? 'caught' : 'progress';
     const rows = (await store.leaderboard(by, 20)).map((r, i) => ({
@@ -343,6 +421,7 @@ async function handle(req, res) {
   // everything below needs a login
   const user = await currentUser(req);
   if (!user) return fail(res, 401, 'กรุณาเข้าสู่ระบบก่อน');
+  if (url.pathname.startsWith('/api/live/')) return live.handle(req, res, { url, user, readBody, send, fail });
   if (route === 'GET /api/me') return send(res, 200, { username: user.username });
   if (route === 'POST /api/logout') {
     await store.dropSession(tokenId((req.headers.authorization || '').split(/\s+/)[1]));
@@ -360,6 +439,44 @@ async function handle(req, res) {
     const savedAt = await store.putSave(user.id, save, scoreOf(save));
     return send(res, 200, { ok: true, savedAt });
   }
+  // ---- challenging other players' teams
+  if (route === 'GET /api/pvp/opponents') {
+    const me = await store.pvpOf(user.id);
+    const rows = (await store.opponents(user.id)).map((r) => ({ ...r, team: cleanTeam(r.party) }))
+      .filter((r) => r.team.length)
+      .sort((a, b) => Math.abs(a.rating - me.rating) - Math.abs(b.rating - me.rating))
+      .slice(0, 30)
+      .map((r) => ({ username: r.username, rating: r.rating, wins: r.wins, losses: r.losses,
+                     size: r.team.length, top: r.team.reduce((n, m) => Math.max(n, m.level), 0),
+                     species: r.team.map((m) => m.sp) }));
+    return send(res, 200, { me: { username: user.username, ...me }, rows });
+  }
+  const pt = /^\/api\/pvp\/team\/(.+)$/.exec(url.pathname);
+  if (pt && req.method === 'GET') {
+    const t = await store.teamOf(decodeURIComponent(pt[1]));
+    const team = t ? cleanTeam(t.party) : [];
+    if (!team.length) return fail(res, 404, 'ไม่พบทีมของผู้เล่นนี้');
+    return send(res, 200, { username: t.username, rating: t.rating, team });
+  }
+  if (route === 'POST /api/pvp/result') {
+    const { opponent, won } = await readBody(req);
+    const t = await store.teamOf(String(opponent || ''));
+    if (!t || Number(t.user_id) === Number(user.id)) return fail(res, 404, 'ไม่พบคู่ต่อสู้');
+    const me = await store.pvpOf(user.id), them = await store.pvpOf(t.user_id);
+    // the same pair counts for rating once every few minutes, so a win cannot be farmed
+    const pairKey = user.id + ':' + t.user_id, now = Date.now();
+    const recent = now - (recentFights.get(pairKey) || 0) < FIGHT_COOLDOWN_MS;
+    let delta = 0;
+    if (!recent) {
+      recentFights.set(pairKey, now);
+      const expect = 1 / (1 + Math.pow(10, (them.rating - me.rating) / 400));
+      delta = Math.round(ELO_K * ((won ? 1 : 0) - expect));
+      await store.setPvp(user.id, { rating: me.rating + delta, wins: me.wins + (won ? 1 : 0), losses: me.losses + (won ? 0 : 1) });
+      await store.setPvp(t.user_id, { rating: them.rating - delta, wins: them.wins + (won ? 0 : 1), losses: them.losses + (won ? 1 : 0) });
+    }
+    return send(res, 200, { rating: me.rating + delta, delta, counted: !recent });
+  }
+
   // ---- trading monsters
   if (route === 'POST /api/trades') {
     const { mon } = await readBody(req);
@@ -412,6 +529,16 @@ const server = http.createServer((req, res) => {
     if (!e.status) console.error(e);
     if (!res.headersSent) fail(res, e.status || 500, e.status === 413 ? 'ข้อมูลใหญ่เกินไป' : 'เซิร์ฟเวอร์ขัดข้อง ลองใหม่อีกครั้ง');
   });
+});
+
+// a finished live battle changes both players' ratings (Elo, like challenges)
+live.setOnFinish(async (winnerId, loserId) => {
+  const w = await store.pvpOf(winnerId), l = await store.pvpOf(loserId);
+  const expect = 1 / (1 + Math.pow(10, (l.rating - w.rating) / 400));
+  const delta = Math.max(1, Math.round(ELO_K * (1 - expect)));
+  await store.setPvp(winnerId, { rating: w.rating + delta, wins: w.wins + 1, losses: w.losses });
+  await store.setPvp(loserId, { rating: l.rating - delta, wins: l.wins, losses: l.losses + 1 });
+  return { [winnerId]: { rating: w.rating + delta, delta }, [loserId]: { rating: l.rating - delta, delta: -delta } };
 });
 
 store.init().then(() => {

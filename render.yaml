@@ -15,11 +15,11 @@ services:
   - type: web
     name: pro-monter-api
     runtime: node
-    rootDir: server
     plan: free
     region: singapore          # closest to players in Thailand
-    buildCommand: npm install
-    startCommand: node index.js
+    # built from the repository root: live battles read the game's rules from game/js/data.js
+    buildCommand: cd server && npm install
+    startCommand: node server/index.js
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL

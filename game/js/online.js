@@ -115,13 +115,15 @@ const ONLINE = (() => {
     },
     flush,
     async leaderboard(by) { return call('GET', '/api/leaderboard?by=' + by); },
-    // trading
-    tradeCreate: (mon) => call('POST', '/api/trades', { mon }),
-    tradeList: () => call('GET', '/api/trades'),
-    tradePeek: (code) => call('GET', '/api/trades/' + encodeURIComponent(code)),
-    tradeAccept: (code, mon) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/accept', { mon }),
-    tradeCancel: (code) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/cancel'),
-    tradeClaim: (code) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/claim'),
+    // live battles
+    liveCreate: (team) => call('POST', '/api/live/create', { team }),
+    liveJoin: (code, team) => call('POST', '/api/live/join', { code, team }),
+    livePoll: (room, since) => call('GET', '/api/live/' + room + '?since=' + since, null, 40000),
+    liveAct: (room, body) => call('POST', '/api/live/' + room + '/act', body),
+    // fighting other players' teams
+    pvpOpponents: () => call('GET', '/api/pvp/opponents'),
+    pvpTeam: (name) => call('GET', '/api/pvp/team/' + encodeURIComponent(name)),
+    pvpResult: (opponent, won) => call('POST', '/api/pvp/result', { opponent, won }),
     // trading
     tradeCreate: (mon) => call('POST', '/api/trades', { mon }),
     tradeList: () => call('GET', '/api/trades'),
