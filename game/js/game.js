@@ -150,6 +150,14 @@
   function upgradeSave() {
     if (typeof G.gold !== 'number') G.gold = GOLD_START;
     for (const id of Object.keys(ITEMS)) if (typeof G.bag[id] !== 'number') G.bag[id] = 0;
+    if (G.flags.badge1 && !G.flags.stones1) { G.flags.stones1 = true; G.bag.stone_rock += GYM_STONES; }
+    if (G.flags.badge2 && !G.flags.stones2) { G.flags.stones2 = true; G.bag.stone_water += GYM_STONES; }
+  }
+  const rarityOf = (sp) => RARITY[SPECIES[sp].rarity || 'common'];
+  // can this monster evolve now? (level reached, and the gym stone in the bag if it needs one)
+  function canEvolve(m) {
+    const evo = SPECIES[m.sp].evolve;
+    return !!evo && m.level >= evo.level && (!evo.item || G.bag[evo.item] > 0);
   }
   const itemCount = (kind) => Object.keys(ITEMS).filter((id) => ITEMS[id].kind === kind)
     .reduce((n, id) => n + G.bag[id], 0);
@@ -678,8 +686,10 @@
       if (result !== 'win') return;
       G.flags[g.flag] = true;
       G.bag.potion += 3;
+      G.flags.stones1 = true; G.bag.stone_rock += GYM_STONES;
       await say('ยอดเยี่ยม! เธอแข็งแกร่งจริง ๆ\nรับเหรียญศิลานี้ไป เป็นหลักฐานว่าเธอชนะยิมแห่งนี้');
-      await say('ได้รับเหรียญศิลา และยา 3 ขวด!');
+      await say('ได้รับเหรียญศิลา ยา 3 ขวด และหินวิวัฒน์ศิลา ' + GYM_STONES + ' ก้อน!');
+      await say('หินวิวัฒน์ศิลาช่วยให้มอนสเตอร์หายากวิวัฒนาการได้\nเมื่อถึงเลเวล มันจะวิวัฒนาการหลังชนะการต่อสู้ครั้งถัดไป');
       await say('ยินดีด้วย! คุณผ่านด่าน 2 แล้ว\nด่านตรวจทางใต้ของเส้นทางที่ 1 จะเปิดทางไปด่าน 3 ให้');
       save();
     },
@@ -732,8 +742,9 @@
       if (result !== 'win') return;
       G.flags[g.flag] = true;
       G.bag.potion_plus += 3;
+      G.flags.stones2 = true; G.bag.stone_water += GYM_STONES;
       await say('สุดยอดเลย! เธอไหลไปกับกระแสได้อย่างงดงาม\nรับเหรียญวารีนี้ไป เป็นหลักฐานว่าเธอชนะยิมแห่งนี้');
-      await say('ได้รับเหรียญวารี และยาชั้นดี 3 ขวด!');
+      await say('ได้รับเหรียญวารี ยาชั้นดี 3 ขวด และหินวิวัฒน์วารี ' + GYM_STONES + ' ก้อน!');
       await say('ยินดีด้วย! คุณผ่านด่าน 4 แล้ว\nทางไปด่าน 5 อยู่ทางใต้ของตลาด (จะเปิดในเวอร์ชันถัดไป)');
       save();
     },
@@ -853,13 +864,14 @@
     await say(hello);
     let at = 0;
     for (;;) {
-      const opts = SHOP_STOCK.map((id) => ({ label: ITEMS[id].name, right: ITEMS[id].price + ' ทอง',
+      const stock = SHOP_STOCK.filter((id) => !ITEMS[id].need || G.flags[ITEMS[id].need]);
+      const opts = stock.map((id) => ({ label: ITEMS[id].name, right: ITEMS[id].price + ' ทอง',
         sub: ITEMS[id].desc + '  (มีอยู่ ' + G.bag[id] + ')' }));
-      const i = await choose(opts, { x: 40, y: 20, w: 400, rowH: 34, cancellable: true, start: at,
+      const i = await choose(opts, { x: 40, y: 8, w: 400, rowH: 34, cancellable: true, start: at,
         title: 'ร้านค้า  เลือกของที่จะซื้อ', footer: 'เหรียญทองของคุณ : ' + G.gold + ' ทอง' });
       if (i < 0) break;
       at = i;
-      const id = SHOP_STOCK[i], it = ITEMS[id];
+      const id = stock[i], it = ITEMS[id];
       if (G.gold < it.price) { await say('เหรียญทองไม่พอ... ' + it.name + 'ราคา ' + it.price + ' ทอง\nแต่คุณมี ' + G.gold + ' ทอง'); continue; }
       const amounts = [1, 5, 10];
       const q = await choose(amounts.map((n) => ({ label: n + ' ชิ้น', right: n * it.price + ' ทอง',
@@ -900,7 +912,7 @@
     let at = 0;
     for (;;) {
       const opts = G.party.map((m) => ({
-        label: nm(m) + '  Lv.' + m.level, badge: SPECIES[m.sp].type, hp: [m.hp, stats(m).hp] }));
+        label: nm(m) + ' ' + rarityOf(m.sp).stars + '  Lv.' + m.level, badge: SPECIES[m.sp].type, hp: [m.hp, stats(m).hp] }));
       opts.push({ label: 'ดูตารางแพ้ธาตุ' });
       const i = await choose(opts, {
         x: 50, y: 24, w: 380, rowH: 30, cancellable: true, start: at,
@@ -930,9 +942,10 @@
 
   function pickWild(area) {
     const e = ENCOUNTERS[area];
-    let roll = Math.random() * e.table.reduce((n, x) => n + x[1], 0);
-    let sp = e.table[0][0];
-    for (const [s, w] of e.table) { if (roll < w) { sp = s; break; } roll -= w; }
+    const table = e.table.map(([s, w]) => [s, w * rarityOf(s).enc]);
+    let roll = Math.random() * table.reduce((n, x) => n + x[1], 0);
+    let sp = table[0][0];
+    for (const [s, w] of table) { if (roll < w) { sp = s; break; } roll -= w; }
     return makeMon(sp, e.levels[0] + rand(e.levels[1] - e.levels[0] + 1));
   }
   async function wildEncounter(area) {
@@ -997,7 +1010,9 @@
       await say('เลเวลของมันคือ ∞ ... พลังที่ไม่มีที่สิ้นสุด');
     } else {
       await tween(300, (t) => { bt.spr.foe.dx = 220 * (1 - t); });
-      await say(nm(bt.foe) + 'ป่าปรากฏตัว!');
+      const tier = SPECIES[bt.foe.sp].rarity;
+      if (tier === 'rare') AUDIO.sfx('rare');
+      await say((tier === 'rare' ? '✦ มอนสเตอร์หายาก! ' : '') + nm(bt.foe) + 'ป่าปรากฏตัว!');
       noteSeen();
     }
     tween(260, (t) => { bt.spr.me.dx = -220 * (1 - t); });
@@ -1077,7 +1092,10 @@
         }
       }
       const evo = SPECIES[m.sp].evolve;
-      if (evo && m.level >= evo.level && !bt.evolving.includes(m)) bt.evolving.push(m);
+      if (canEvolve(m) && !bt.evolving.includes(m)) bt.evolving.push(m);
+      else if (evo && evo.item && m.level === evo.level && !bt.evolving.includes(m)) {
+        await say(nm(m) + 'แข็งแกร่งพอจะวิวัฒนาการแล้ว\nแต่ต้องมี' + ITEMS[evo.item].name + 'จากยิมก่อน');
+      }
     }
     // A monster keeps at most MAX_MOVES moves. With a full set the player chooses one to
     // forget, or keeps the old set.
@@ -1101,8 +1119,12 @@
     // Change a monster into its next form, on the battle screen once the fight is over.
     async function evolve(m) {
       const evo = SPECIES[m.sp].evolve;
-      if (!evo || m.level < evo.level || m.hp <= 0) return;
+      if (!canEvolve(m) || m.hp <= 0) return;
       const oldName = nm(m);
+      if (evo.item) {
+        G.bag[evo.item]--;
+        await say('ใช้' + ITEMS[evo.item].name + 'กับ' + oldName);
+      }
       bt.evo = { from: m.sp, to: evo.to, showNew: false, t: 0 };
       await say('เอ๊ะ? ' + oldName + 'มีท่าทางแปลกไป!');
       bt.fx = { type: 'evolve', x: 240, y: 132, t: 0, strong: true };
@@ -1349,7 +1371,10 @@
       AUDIO.sfx('coin');
       await say('ได้รับเหรียญทอง ' + gold + ' ทอง!');
     }
-    if (result !== 'lose') for (const m of bt.evolving) await evolve(m);
+    if (result !== 'lose') {
+      for (const m of G.party) if (m.hp > 0 && canEvolve(m) && !bt.evolving.includes(m)) bt.evolving.push(m);
+      for (const m of bt.evolving) await evolve(m);
+    }
     if (result === 'lose') await say('ไม่มีมอนสเตอร์ที่สู้ไหวแล้ว...\nคุณรีบพามอนสเตอร์กลับไปที่ศูนย์รักษา');
     await fadeTo(1, 240);
     bt = null; mode = 'world';
@@ -1630,6 +1655,8 @@
     text(sp.name, 164, 42, 15, '#2b2420', 'left', true);
     badge(sp.type, 170 + ctx.measureText(sp.name).width, 40);
     text('Lv.' + m.level, 428, 42, 12, '#5a5048', 'right');
+    const tier = rarityOf(m.sp);
+    text(tier.name + ' ' + tier.stars, 428, 121, 11, tier.color, 'right', true);
     text('HP', 164, 61, 9, '#c0442f', 'left', true);
     hpBar(182, 54, 170, m.hp, st.hp);
     text(m.hp + ' / ' + st.hp, 428, 62, 11, '#5a5048', 'right');
@@ -1652,7 +1679,9 @@
     }
     const next = sp.moves.find(([lv, id]) => lv > m.level && !m.moves.includes(id));
     text(next ? 'ท่าถัดไป : ' + MOVES[next[1]].name + ' ที่ Lv.' + next[0] : 'ท่าถัดไป : เรียนครบทุกท่าแล้ว', 56, 226, 11, '#5a5048');
-    text(sp.evolve ? 'วิวัฒนาการ : เป็น' + SPECIES[sp.evolve.to].name + ' ที่ Lv.' + sp.evolve.level : 'วิวัฒนาการ : ร่างสุดท้ายแล้ว', 56, 244, 11, '#5a5048');
+    const evo = sp.evolve;
+    text(evo ? 'วิวัฒนาการ : เป็น' + SPECIES[evo.to].name + ' ที่ Lv.' + evo.level
+      + (evo.item ? ' + ' + ITEMS[evo.item].name + ' (มี ' + G.bag[evo.item] + ')' : '') : 'วิวัฒนาการ : ร่างสุดท้ายแล้ว', 56, 244, 11, '#5a5048');
   }
 
   function drawTitle() {

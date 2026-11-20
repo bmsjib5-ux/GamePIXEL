@@ -315,6 +315,48 @@ SPECIES.legend = { name: 'คชานภา', type: 'legend', img: 'legend_sky_
                    hp: 255, atk: 255, def: 255, spd: 255, moves: [[1, 'tackle']] };
 const LEGEND_AFTER = 3;
 
+// ---- Rarity. Rarer monsters turn up less often in the grass (enc multiplies their weight in
+// the encounter tables) and evolve on harder terms.
+const RARITY = {
+  common:   { name: 'ธรรมดา',    stars: '★',    color: '#8a8478', enc: 1 },
+  uncommon: { name: 'ไม่ธรรมดา', stars: '★★',   color: '#2f8a3a', enc: 0.6 },
+  rare:     { name: 'หายาก',     stars: '★★★',  color: '#3f6fd0', enc: 0.25 },
+  legend:   { name: 'ตำนาน',     stars: '★★★★', color: '#c98a10', enc: 0 },
+};
+// Each family (named by its first form): its rarity, then the terms of each evolution step,
+// [level, gym stone needed or nothing]. Only rare monsters need a stone from a gym.
+//   common:   one evolution at Lv.20
+//   uncommon: one evolution at Lv.30, or two at Lv.20 and Lv.30
+//   rare:     Lv.20 + a gym stone (and Lv.30 + the Water Gym's stone for a second form)
+const FAMILY = {
+  lamb:     ['rare', [20, 'stone_rock'], [30, 'stone_water']],
+  narwhal:  ['rare', [20, 'stone_rock'], [30, 'stone_water']],
+  pangolin: ['rare', [20, 'stone_rock'], [30, 'stone_water']],
+  beetle:   ['uncommon', [20], [30]],
+  tortoise: ['uncommon', [20], [30]],
+  moth:     ['uncommon', [20], [30]],
+  frog: ['common', [20]], crab: ['common', [20]], duck: ['common', [20]], bat: ['common', [20]],
+  rooster: ['common', [20]],
+  snail: ['uncommon', [30]], buffalo: ['uncommon', [30]], gecko: ['uncommon', [30]],
+  kite: ['rare', [20, 'stone_rock']], durian: ['rare', [20, 'stone_rock']],
+  betta: ['common', [20]], hyacinth: ['common', [20]],
+  firefly: ['uncommon', [30]], kingfisher: ['uncommon', [30]],
+  krathong: ['rare', [20, 'stone_water']],
+};
+for (const [first, [rarity, ...steps]] of Object.entries(FAMILY)) {
+  let sp = first;
+  for (let i = 0; sp; i++) {
+    SPECIES[sp].rarity = rarity;
+    const evo = SPECIES[sp].evolve;
+    if (!evo) break;
+    const [level, item] = steps[i];
+    evo.level = level;
+    if (item) evo.item = item; else delete evo.item;
+    sp = evo.to;
+  }
+}
+SPECIES.legend.rarity = 'legend';
+
 const STARTERS = ['lamb', 'narwhal', 'pangolin'];
 // the species the professor asks you to collect (evolved forms do not count separately)
 const GOAL_SPECIES = ['lamb', 'narwhal', 'pangolin', 'beetle', 'tortoise', 'moth'];
@@ -386,8 +428,15 @@ const ITEMS = {
                  desc: 'ฟื้นพลังชีวิต 20 แต้ม' },
   potion_plus: { name: 'ยาชั้นดี',     kind: 'heal', heal: 60,  price: 150,
                  desc: 'ฟื้นพลังชีวิต 60 แต้ม' },
+  // gym stones: rare monsters need one to evolve. Each gym's leader gives some; once you hold
+  // the gym's badge ("need"), shops sell them too.
+  stone_rock:  { name: 'หินวิวัฒน์ศิลา', kind: 'stone', price: 1200, need: 'badge1',
+                 desc: 'มอนสเตอร์หายากใช้วิวัฒนาการร่างแรก' },
+  stone_water: { name: 'หินวิวัฒน์วารี', kind: 'stone', price: 2000, need: 'badge2',
+                 desc: 'มอนสเตอร์หายากใช้วิวัฒนาการ (กระทงผี, ร่างที่ 2)' },
 };
-const SHOP_STOCK = ['capsule', 'capsule_gold', 'potion', 'potion_plus'];
+const SHOP_STOCK = ['capsule', 'capsule_gold', 'potion', 'potion_plus', 'stone_rock', 'stone_water'];
+const GYM_STONES = 3;      // stones each gym leader gives
 // Gold: a new game starts with GOLD_START; old saves without gold get the same amount.
 // Beating a wild monster pays its level x GOLD_WILD; beating a trainer pays the sum of the
 // team's levels x GOLD_TRAINER.
