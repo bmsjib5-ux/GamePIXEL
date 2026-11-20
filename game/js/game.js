@@ -643,11 +643,11 @@
       }
     },
     // ---- the Rock Gym
-    async gym_hiker() { await gymTrainer('hiker', 'gym_hiker',
+    async gym_hiker() { await gymTrainer(GYM.hiker, 'gym_hiker',
       'โฮ่! ผู้ท้าชิงคนใหม่สินะ จะไปถึงหัวหน้ายิมต้องผ่านฉันไปก่อน!',
       'แรงดีไม่มีตก! ผ่านไปได้เลย แต่คนข้างในเก่งกว่าฉันนะ',
       'ฝึกปีนเขาทุกวันขาจะแข็งแรง มอนสเตอร์ก็เหมือนกัน'); },
-    async gym_kid() { await gymTrainer('kid', 'gym_kid',
+    async gym_kid() { await gymTrainer(GYM.kid, 'gym_kid',
       'หนูสำรวจถ้ำมาทั่วแล้ว มอนสเตอร์หินของหนูไม่แพ้ใครหรอก!',
       'แพ้จนได้... พี่เก่งจัง หัวหน้ายิมรออยู่ข้างในแล้วค่ะ',
       'ธาตุหินแพ้ทางน้ำกับพืชนะ พี่รู้อยู่แล้วใช่ไหม'); },
@@ -694,6 +694,49 @@
       if (G.flags.r1c) { await say('ลังไม้ว่างเปล่า'); return; }
       G.flags.r1c = true; G.bag.capsule += 4; G.bag.potion += 2;
       await say('เปิดลังไม้ดู...\nพบแคปซูล 4 ลูกและยา 2 ขวด!'); save();
+    },
+
+    // ---- Route 2 (stage 3)
+    async r2_hiker() { await gymTrainer(ROUTE2_TRAINERS.hiker, 'r2_hiker',
+      'ทุ่งผาหินนี้ลมแรงนัก มอนสเตอร์ที่อยู่รอดได้ต้องแกร่งจริง\nมาลองดูว่าทีมเธอแกร่งพอไหม!',
+      'โอ้โห แกร่งกว่าหินผาซะอีก! ข้างหน้ายังมีอีกไกล สู้ต่อไปนะ',
+      'บึงทางตะวันออกมีมอนสเตอร์น้ำชุกชุม ระวังธาตุไฟของเธอด้วยล่ะ'); },
+    async r2_kid() { await gymTrainer(ROUTE2_TRAINERS.kid, 'r2_kid',
+      'ตกปลาทั้งวันได้แต่มอนสเตอร์! มาประลองกับหนูหน่อยสิ',
+      'แพ้แล้ว... ปลาก็ไม่กินเบ็ด มอนสเตอร์ก็แพ้ วันนี้ซวยจัง',
+      'พงหญ้าทางใต้มีมอนสเตอร์ที่วิวัฒนาการแล้วด้วยนะ หนูเคยเห็นแกะเพลิงตัวโตด้วย!'); },
+    async rival3() {
+      if (G.flags.stage3) { await say('ด่าน 4 อยู่ข้างหน้าแล้ว... แต่ได้ยินว่าทางยังสร้างไม่เสร็จ\nไว้ทางเปิดเมื่อไหร่ เราไปผจญภัยกันต่อนะ!'); return; }
+      if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปดื่มน้ำพุฟื้นพลังก่อนเถอะ'); return; }
+      await say('ในที่สุดก็มาถึง! ฉันรอนายอยู่ตรงนี้นานแล้ว\nคู่หูของฉันวิวัฒนาการจนถึงร่างสุดท้ายแล้วนะ');
+      await say('นี่คือการประลองครั้งสุดท้ายของด่านนี้ ทุ่มให้สุดตัวเลย!');
+      const team = RIVAL_FINAL.map(([sp, lv]) => makeMon(sp === 'starter3' ? RIVAL_PICK[G.flags.starter] + '3' : sp, lv));
+      const result = await battle(team, { name: 'พายุ', img: 'chars/rival_large' });
+      if (result !== 'win') return;
+      G.flags.stage3 = true;
+      G.bag.capsule += 5; G.bag.potion += 5;
+      await say('...แพ้อีกจนได้ แต่ครั้งนี้ฉันไม่เสียใจเลย\nนายคือคู่แข่งที่ดีที่สุดของฉัน');
+      await say('ได้รับแคปซูล 5 ลูกและยา 5 ขวด!');
+      await say('ยินดีด้วย! คุณผ่านด่าน 3 แล้ว\nทางไปด่าน 4 อยู่ทางใต้ (จะเปิดในเวอร์ชันถัดไป)');
+      save();
+    },
+    async sign_r2_top() { await say('เส้นทางที่ 2  ทุ่งผาหิน\nทิศเหนือ : เส้นทางที่ 1   ทิศใต้ : ทางไปด่าน 4'); },
+    async sign_r2_spring() { await say('ลานน้ำพุผาหิน\nสำรวจบ่อน้ำเพื่อฟื้นพลังมอนสเตอร์ได้ทุกเมื่อ'); },
+    async sign_r2_end() { await say('ทิศใต้ : ทางไปด่าน 4\nคู่แข่งของคุณรออยู่ตรงทางออก'); },
+    async r2_crate_a() {
+      if (G.flags.r2a) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.r2a = true; G.bag.capsule += 4;
+      await say('เปิดลังไม้ดู...\nพบแคปซูล 4 ลูก!'); save();
+    },
+    async r2_crate_b() {
+      if (G.flags.r2b) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.r2b = true; G.bag.potion += 4;
+      await say('เปิดลังไม้ดู...\nพบยา 4 ขวด!'); save();
+    },
+    async r2_crate_c() {
+      if (G.flags.r2c) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.r2c = true; G.bag.capsule += 3; G.bag.potion += 3;
+      await say('เปิดลังไม้ดู...\nพบแคปซูล 3 ลูกและยา 3 ขวด!'); save();
     },
 
     async sign_village() { await say('หมู่บ้านต้นกล้า\nทิศใต้ : เส้นทางที่ 1 และพงหญ้าสูง'); },
@@ -746,9 +789,9 @@
     },
   };
 
-  // A trainer who blocks the way in the gym: fight once, then they step aside for good.
-  async function gymTrainer(key, npcId, hello, beaten, later) {
-    const g = GYM[key];
+  // A trainer who fights once. Gym trainers block the way and step aside for good once
+  // beaten (their map entry has a "moved" spot); trainers on a route just stay where they are.
+  async function gymTrainer(g, npcId, hello, beaten, later) {
     if (G.flags[g.flag]) { await say(later); return; }
     if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของเธอหมดแรงหมดแล้ว ไปฟื้นพลังที่ลานน้ำพุก่อนเถอะ'); return; }
     await say(hello);
@@ -758,6 +801,7 @@
     G.flags[g.flag] = true;
     await say(beaten);
     const spot = MAP.npcs.find((n) => n.id === npcId).moved;
+    if (!spot) { save(); return; }
     await fadeTo(1, 160);
     const here = npcs.find((n) => n.id === npcId);
     if (here) { here.c = spot.c; here.r = spot.r; here.dir = spot.dir; }

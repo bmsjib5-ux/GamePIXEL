@@ -265,6 +265,13 @@ const ENCOUNTERS = {
   route_b: { levels: [6, 8],  table: [['crab', 26], ['duck', 22], ['snail', 20], ['buffalo', 20], ['kite', 12]] },
   route_c: { levels: [8, 10], table: [['durian', 22], ['kite', 18], ['gecko', 16], ['buffalo', 14], ['snail', 10],
                                       ['beetle2', 8], ['tortoise2', 6], ['moth2', 6]] },
+  // Route 2 (stage 3): stronger monsters, and some of them have already evolved
+  route_d: { levels: [10, 12], table: [['rooster', 20], ['bat', 18], ['gecko', 18], ['kite', 14],
+                                       ['beetle2', 16], ['moth2', 14]] },
+  route_e: { levels: [11, 13], table: [['duck', 22], ['crab', 20], ['frog', 18], ['tortoise2', 14],
+                                       ['duck2', 9], ['crab2', 9], ['narwhal2', 8]] },
+  route_f: { levels: [12, 14], table: [['buffalo', 16], ['snail', 14], ['durian', 16], ['kite2', 10], ['gecko2', 10],
+                                       ['rooster2', 10], ['bat2', 8], ['lamb2', 8], ['pangolin2', 8]] },
 };
 // the rival's team for the rematch at the end of Route 1: [species, level]; "starter2" is
 // the first evolution of the starter he took
@@ -277,5 +284,13 @@ const GYM = {
   kid:    { name: 'นักสำรวจน้องแก้ว', flag: 'gym2',   team: [['tortoise', 10], ['crab', 10]] },
   leader: { name: 'หัวหน้ายิมศิลา',   flag: 'badge1', team: [['snail', 11], ['buffalo', 12], ['tortoise2', 13]] },
 };
+// Trainers along Route 2 (stage 3): each fights once, when spoken to.
+const ROUTE2_TRAINERS = {
+  hiker: { name: 'นักเดินป่าผาหิน', flag: 'r2t1', team: [['snail2', 12], ['buffalo', 13]] },
+  kid:   { name: 'เด็กตกปลาริมบึง', flag: 'r2t2', team: [['duck', 12], ['crab2', 13], ['frog2', 13]] },
+};
+// The rival's final team at the end of Route 2; "starter3" is the last form of his starter.
+// Beating it clears stage 3.
+const RIVAL_FINAL = [['kite2', 14], ['rooster2', 15], ['starter3', 16]];
 const ENCOUNTER_CHANCE = 0.13;
 const PARTY_MAX = 6;

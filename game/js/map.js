@@ -360,15 +360,86 @@ function buildRoute1() {
   m.things.sort((a, b) => a.sortY - b.sortY);
   m.npcs.push({ id: 'rival2', sheet: 'chars/npc_rival', c: 20, r: 31, dir: 'up' });
   m.exits.push({ side: 'up', c0: 13, c1: 15, to: { map: 'village', dc: 1, r: MAP_H - 1 } });
-  // the road south needs the gym's badge; stage 3 itself is not built yet (to: null)
-  m.exits.push({ side: 'down', c0: 19, c1: 21, to: null, need: 'badge1',
-                 lockedText: 'ด่านตรวจขวางทางอยู่: "ผู้ที่จะไปด่าน 3 ต้องมีเหรียญศิลา"\nไปท้าประลองที่ยิมศิลาทางตะวันตกของถนนก่อน',
-                 soonText: 'เหรียญศิลาส่องประกาย ด่านตรวจเปิดทางให้แล้ว!\nแต่ด่าน 3 ยังอยู่ระหว่างสร้าง จะตามมาในเวอร์ชันถัดไป' });
+  // the road south leads to Route 2 (stage 3) and needs the gym's badge
+  m.exits.push({ side: 'down', c0: 19, c1: 21, to: { map: 'route2', dc: R2_ENTRY - 19, r: 0 }, need: 'badge1',
+                 lockedText: 'ด่านตรวจขวางทางอยู่: "ผู้ที่จะไปด่าน 3 ต้องมีเหรียญศิลา"\nไปท้าประลองที่ยิมศิลาทางตะวันตกของถนนก่อน' });
+  return m;
+}
+
+// Stage 3: Route 2, the rocky highland. The road zigzags past cliffs and a lake; wild monsters
+// here are stronger and some have already evolved. Two trainers wait by the road and the rival
+// has his final duel near the far end; beating him clears stage 3.
+const R2_W = 30, R2_H = 38;
+const R2_ENTRY = 13;                    // first column of the road where it comes in from Route 1
+function buildRoute2() {
+  const rng = seededRandom(20261121);
+  const B = mapBuilder('route2', R2_W, R2_H, 'grass');
+  const m = B.m, ground = m.ground, block = B.block;
+  m.title = 'เส้นทางที่ 2  ทุ่งผาหิน';
+  for (let r = 0; r < R2_H; r++) for (let c = 0; c < R2_W; c++) {
+    const v = rng();
+    ground[r][c] = v < 0.66 ? 'grass' : v < 0.88 ? 'grass_tufts' : v < 0.95 ? 'grass_white_flowers' : 'grass_color_flowers';
+  }
+  const put = (layout) => { for (const [k, name] of layout) { const [c, r] = k.split(',').map(Number); ground[r][c] = name; } };
+
+  // ---- the road: in at the top, west under the cliffs, south past the lake, east, out at the bottom
+  const road = union(rect(13, 0, 15, 11), rect(4, 9, 15, 11), rect(4, 9, 6, 26),
+                     rect(4, 24, 24, 26), rect(22, 24, 24, 37));
+  // a narrow path from the road to the spring
+  put(stripLayout('path', road, cells(line(10, 27, 10, 27)), true, R2_W, R2_H));
+
+  // ---- a lake east of the road, cliffs in the north-east and the south
+  put(stripLayout('pond', rect(17, 14, 25, 21), new Set(), false, R2_W, R2_H));
+  put(autotile('plateau', rect(18, 9, 26, 12), false, R2_W, R2_H));
+  put(autotile('plateau', rect(8, 33, 13, 35), false, R2_W, R2_H));
+  put(autotile('plaza', rect(8, 28, 13, 30), false, R2_W, R2_H));        // resting place with a spring
+
+  // ---- tall grass: route_d up north, route_e by the lake, route_f (toughest) in the south
+  const grass = [[rect(3, 3, 10, 7), 'route_d'], [rect(18, 3, 25, 7), 'route_d'],
+                 [rect(8, 13, 14, 22), 'route_e'], [rect(17, 22, 25, 23), 'route_e'],
+                 [rect(2, 28, 6, 35), 'route_f'], [rect(15, 28, 20, 35), 'route_f']];
+  for (const [set, area] of grass) {
+    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = 'tall_grass'; m.tall.set(k, area); }
+  }
+  blockTerrain(m, block);
+
+  const object = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
+  // forest on both sides, trees along the top, fence along the bottom
+  const treeKinds = ['tree_pine', 'tree_pine', 'tree_round', 'tree_pine', 'tree_apple', 'tree_round', 'tree_pine', 'tree_orange'];
+  const pick = () => treeKinds[Math.floor(rng() * treeKinds.length)];
+  for (let c = 0; c < R2_W; c += 2) if (c < 12 || c > 16) object(pick(), c, 2);
+  for (let r = 4; r < R2_H; r += 2) { object(pick(), 0, r); object(pick(), 28, r); }
+  for (let r = 0; r < R2_H; r++) { block(0, r); block(1, r); block(28, r); block(29, r); }
+  for (let c = 0; c < R2_W; c++) if (c < 12 || c > 16) for (let r = 0; r < 3; r++) block(c, r);
+  block(12, 0); block(16, 0);
+  for (let c = 2; c < 28; c++) if (c < 22 || c > 24) object('fence_h', c, 37);
+
+  object('tree_round', 15, 16); object('tree_pine', 2, 22); object('tree_apple', 25, 31);
+  object('rocks', 12, 8); object('boulder', 17, 8); object('rocks', 26, 13); object('boulder', 16, 23);
+  object('boulder', 7, 23); object('rocks', 14, 32); object('boulder', 21, 29); object('rocks', 26, 23);
+  object('bush', 16, 12); object('bush_berry', 7, 16); object('bush', 26, 27); object('bush_berry', 2, 12);
+  object('well', 10, 29, { id: 'spring' });
+  object('signpost', 16, 2, { id: 'sign_r2_top' });
+  object('signpost', 14, 29, { id: 'sign_r2_spring' });
+  object('signpost', 21, 35, { id: 'sign_r2_end' });
+  object('crate', 26, 8, { id: 'r2_crate_a' });
+  object('crate', 2, 26, { id: 'r2_crate_b' });
+  object('crate', 26, 35, { id: 'r2_crate_c' });
+
+  m.things.sort((a, b) => a.sortY - b.sortY);
+  m.npcs.push({ id: 'r2_hiker', sheet: 'chars/npc_gym_hiker', c: 9, r: 10, dir: 'down' });
+  m.npcs.push({ id: 'r2_kid', sheet: 'chars/npc_gym_kid', c: 16, r: 25, dir: 'left' });
+  m.npcs.push({ id: 'rival3', sheet: 'chars/npc_rival', c: 23, r: 32, dir: 'up' });
+  m.exits.push({ side: 'up', c0: R2_ENTRY, c1: R2_ENTRY + 2, to: { map: 'route1', dc: 19 - R2_ENTRY, r: R1_H - 1 } });
+  // the road on to stage 4 opens after the final duel with the rival; stage 4 is not built yet
+  m.exits.push({ side: 'down', c0: 22, c1: 24, to: null, need: 'stage3',
+                 lockedText: 'พายุยืนขวางทางอยู่ข้างหน้า\nต้องประลองชนะเขาก่อนจึงจะผ่านไปได้',
+                 soonText: 'ทางไปด่าน 4 อยู่ข้างหน้าแล้ว!\nแต่ด่าน 4 ยังอยู่ระหว่างสร้าง จะตามมาในเวอร์ชันถัดไป' });
   return m;
 }
 
 function buildMaps() {
-  const maps = { village: buildVillage(), route1: buildRoute1() };
+  const maps = { village: buildVillage(), route1: buildRoute1(), route2: buildRoute2() };
   for (const id of Object.keys(ROOMS)) maps[id] = buildRoom(id);
   return maps;
 }
