@@ -388,9 +388,10 @@
       else if (k === 'left' && m.cols > 1) i -= 1; else if (k === 'right' && m.cols > 1) i += 1;
       else if (k === 'ok' && !repeat) {
         if (m.opts[m.index].disabled) return;
+        AUDIO.sfx('confirm');
         ui.menu = null; m.resolve(m.index); return;
-      } else if (k === 'back' && !repeat && m.cancellable) { ui.menu = null; m.resolve(-1); return; }
-      if (i !== m.index && i >= 0 && i < n) { m.index = i; if (m.onMove) m.onMove(i); }
+      } else if (k === 'back' && !repeat && m.cancellable) { AUDIO.sfx('cancel'); ui.menu = null; m.resolve(-1); return; }
+      if (i !== m.index && i >= 0 && i < n) { m.index = i; AUDIO.sfx('cursor'); if (m.onMove) m.onMove(i); }
       return;
     }
     if (ui.msg) {
@@ -398,7 +399,7 @@
       const m = ui.msg, len = pageLength(m.pages[m.page]);
       if (m.shown < len) m.shown = len;
       else if (m.page < m.pages.length - 1) { m.page++; m.shown = 0; }
-      else { ui.msg = null; m.resolve(); }
+      else { AUDIO.sfx('blip'); ui.msg = null; m.resolve(); }
       return;
     }
     if (mode === 'world' && !busy && !pl.moving && !repeat) {
@@ -408,8 +409,11 @@
   }
 
   // --------------------------------------------------------------- overworld
+  // background tune of each map: the routes and the Rock Gym have their own, the rest share the village's
+  const mapMusic = () => AUDIO.music(['route1', 'route2', 'gym'].includes(MAP.id) ? 'route' : 'village');
   function setMap(id) {
     MAP = MAPS[id] || MAPS.village;
+    if (mode !== 'battle') mapMusic();
     if (!groundCache[MAP.id]) {
       const cv = document.createElement('canvas');
       cv.width = MAP.w * TS; cv.height = MAP.h * TS;
@@ -462,7 +466,7 @@
     const [dx, dy] = DIRS[d];
     const c = pl.c + dx, r = pl.r + dy;
     const door = MAP.warps.get(cellKey(c, r));
-    if (door) { run(() => travel(door)); return; }
+    if (door) { AUDIO.sfx('door'); run(() => travel(door)); return; }
     if (c < 0 || r < 0 || c >= MAP.w || r >= MAP.h) {        // walking off the map: an exit, or nothing
       const exit = MAP.exits.find((e) => e.side === d && pl.c >= e.c0 && pl.c <= e.c1);
       if (!exit) return;
@@ -602,7 +606,7 @@
     async healer() {
       await say('ศูนย์รักษายินดีต้อนรับ ให้ฉันดูแลมอนสเตอร์ของเธอนะ');
       if (!G.party.length) { await say('อ้าว เธอยังไม่มีมอนสเตอร์นี่นา ไปหาศาสตราจารย์สนก่อนสิ'); return; }
-      await fadeTo(0.6, 250); healParty(); await wait(350); await fadeTo(0, 250);
+      await fadeTo(0.6, 250); healParty(); AUDIO.sfx('heal'); await wait(350); await fadeTo(0, 250);
       G.healSpot = { map: MAP.id, c: HEAL_SPOT.c, r: HEAL_SPOT.r, dir: 'up' };   // wake up here after a loss
       await say('เรียบร้อย! ทุกตัวแข็งแรงเต็มที่แล้ว');
       save();
@@ -675,7 +679,7 @@
     async spring() {
       await say('น้ำพุใสเย็นไหลออกมาจากบ่อหิน\nมอนสเตอร์ทั้งทีมได้ดื่มน้ำจนสดชื่น');
       if (!G.party.length) return;
-      await fadeTo(0.6, 250); healParty(); await wait(350); await fadeTo(0, 250);
+      await fadeTo(0.6, 250); healParty(); AUDIO.sfx('heal'); await wait(350); await fadeTo(0, 250);
       await say('ทุกตัวฟื้นพลังเต็มที่แล้ว!');
       save();
     },
@@ -791,7 +795,7 @@
     // ---- inside the buildings
     async home_bed() {
       if (!(await yesNo('เตียงของคุณเอง จะนอนพักสักครู่ไหม?'))) return;
-      await fadeTo(1, 350); healParty(); await wait(500); await fadeTo(0, 350);
+      await fadeTo(1, 350); healParty(); AUDIO.sfx('heal'); await wait(500); await fadeTo(0, 350);
       await say(G.party.length ? 'ตื่นมาสดชื่น! มอนสเตอร์ทุกตัวฟื้นพลังเต็มที่แล้ว' : 'ตื่นมาสดชื่น!');
       save();
     },
@@ -855,6 +859,7 @@
       const n = amounts[q];
       G.gold -= n * it.price;
       G.bag[id] += n;
+      AUDIO.sfx('coin');
       await say('ซื้อ' + it.name + ' ' + n + ' ชิ้น จ่ายไป ' + n * it.price + ' ทอง\nเหลือเหรียญทอง ' + G.gold + ' ทอง');
     }
     await say('ขอบคุณที่อุดหนุนนะ แวะมาใหม่ล่ะ!');
@@ -965,6 +970,7 @@
     };
     if (opts.legend) { bt.spr.foe.dx = 0; bt.spr.foe.dy = -240; }      // it descends from the sky
     mode = 'battle';
+    AUDIO.music(trainer ? 'trainer' : 'battle');
     const foeName = () => trainer ? nm(bt.foe) + 'ของ' + trainer.name : nm(bt.foe) + 'ป่า';
     await fadeTo(0, 220);
     let result = null;
@@ -1022,12 +1028,14 @@
       const { dmg, eff } = damage(att, def, mv);
       // the move's effect plays over the target, which shakes while it is being hit
       bt.fx = { type: mv.type, x: SPOT[other].x, y: SPOT[other].y - 60, t: 0, strong: eff > 1 };
+      AUDIO.sfx('attack');
       await tween(eff > 1 ? 520 : 440, (t) => {
         bt.fx.t = t;
         hit.dx = t > 0.25 && t < 0.9 ? Math.round(Math.sin(t * 46) * (eff > 1 ? 5 : 3)) : 0;
         if (eff > 1) ui.flash = t > 0.3 && t < 0.42 ? 0.35 : 0;
       });
       bt.fx = null; hit.dx = 0; ui.flash = 0;
+      AUDIO.sfx(eff > 1 ? 'hitStrong' : eff < 1 ? 'hitWeak' : 'hit');
       await tween(240, (t) => { hit.blink = Math.floor(t * 4) % 2 === 0; });
       hit.blink = false;
       const from = def.hp;
@@ -1041,6 +1049,7 @@
     }
     async function faint(side) {
       const s = bt.spr[side];
+      AUDIO.sfx('faint');
       await tween(420, (t) => { s.dy = 46 * t; s.alpha = 1 - t; });
       await say((side === 'me' ? nm(bt.me) : foeName()) + 'หมดแรง!');
     }
@@ -1051,6 +1060,7 @@
         m.level++;
         m.hp = stats(m).hp;               // a level up restores all hit points
         if (m === bt.me) bt.hp.me = m.hp;
+        AUDIO.sfx('levelup');
         await say(nm(m) + 'เลเวลอัปเป็น Lv.' + m.level + '!\nพลังชีวิตฟื้นเต็มแล้ว');
         for (const [lv, mv] of SPECIES[m.sp].moves) {
           if (lv === m.level && !m.moves.includes(mv)) await learnMove(m, mv);
@@ -1087,6 +1097,7 @@
       await say('เอ๊ะ? ' + oldName + 'มีท่าทางแปลกไป!');
       bt.fx = { type: 'evolve', x: 240, y: 132, t: 0, strong: true };
       // the two forms flicker faster and faster, then a white flash settles on the new one
+      AUDIO.sfx('evolve');
       await tween(2600, (t) => { bt.evo.t = t; bt.fx.t = (t * 3) % 1; bt.evo.showNew = Math.sin(t * t * 70) > 0; });
       await tween(160, (t) => { ui.flash = t; });
       const before = stats(m).hp, oldSp = m.sp;
@@ -1096,6 +1107,7 @@
       bt.evo.showNew = true; bt.fx = null;
       noteCaught(m.sp);
       await tween(420, (t) => { ui.flash = 1 - t; });
+      AUDIO.sfx('fanfare');
       await say('ยินดีด้วย! ' + oldName + 'วิวัฒนาการเป็น' + nm(m) + 'แล้ว!');
       // moves of the new form learned at a level already passed (it evolves late, at Lv.20 / 30)
       const had = SPECIES[oldSp].moves.map((x) => x[1]);
@@ -1167,6 +1179,7 @@
           await tween(110, (t) => { s.dx = 20 * t; s.dy = -9 * t; });
           await tween(110, (t) => { s.dx = 20 * (1 - t); s.dy = -9 * (1 - t); });
           bt.fx = { type: mv.type, x: SPOT.foe.x, y: SPOT.foe.y - 60, t: 0, strong: false };
+          AUDIO.sfx('attack');
           await tween(440, (t) => { bt.fx.t = t; });
           bt.fx = null;
           bt.pop = { text: '-0', x: SPOT.foe.x - 58, y: SPOT.foe.y - 96, t: 0, color: '#c8c8d0', big: false };
@@ -1177,6 +1190,7 @@
           const ball = await pickItem('ball');
           if (!ball) continue;
           await say('โยน' + ITEMS[ball].name + 'ออกไป!');
+        AUDIO.sfx('throw');
           const from = { x: SPOT.me.x + 30, y: SPOT.me.y - 90 }, to = { x: SPOT.foe.x, y: SPOT.foe.y - 70 };
           bt.capsule = { x: from.x, y: from.y };
           await tween(420, (t) => { bt.capsule.x = from.x + (to.x - from.x) * t; bt.capsule.y = from.y + (to.y - from.y) * t - Math.sin(t * Math.PI) * 60; });
@@ -1192,6 +1206,7 @@
           G.bag[med]--;
           const before = bt.me.hp;
           bt.me.hp = Math.min(max, bt.me.hp + ITEMS[med].heal);
+        AUDIO.sfx('heal');
           await say('ใช้' + ITEMS[med].name + 'กับ' + nm(bt.me));
           await tween(350, (t) => { bt.hp.me = before + (bt.me.hp - before) * t; });
         } else {
@@ -1204,7 +1219,7 @@
       await say(name + 'เปล่งแสงเจิดจ้า!');
       await tween(220, (t) => { ui.flash = t; });
       const before = bt.me.hp;
-      healParty();
+      healParty(); AUDIO.sfx('heal');
       bt.hp.me = bt.me.hp;
       await tween(520, (t) => { ui.flash = 1 - t; });
       if (bt.me.hp > before || G.party.some((m) => m !== bt.me)) await say('แสงอันอบอุ่นโอบล้อมทั้งทีม\nมอนสเตอร์ทุกตัวฟื้นพลังเต็มที่');
@@ -1267,6 +1282,7 @@
         if (!ball) continue;
         G.bag[ball]--;
         await say('โยน' + ITEMS[ball].name + 'ออกไป!');
+        AUDIO.sfx('throw');
         const from = { x: SPOT.me.x + 30, y: SPOT.me.y - 90 }, to = { x: SPOT.foe.x, y: SPOT.foe.y - 70 };
         bt.capsule = { x: from.x, y: from.y };
         await tween(420, (t) => { bt.capsule.x = from.x + (to.x - from.x) * t; bt.capsule.y = from.y + (to.y - from.y) * t - Math.sin(t * Math.PI) * 60; });
@@ -1277,10 +1293,12 @@
         const shakes = caught ? 3 : rand(3);
         for (let i = 0; i < shakes; i++) {
           await wait(260);
+          AUDIO.sfx('shake');
           await tween(260, (t) => { bt.capsule.x = to.x + Math.sin(t * Math.PI * 2) * 5; });
         }
         await wait(260);
         if (caught) {
+          AUDIO.music(null); AUDIO.sfx('caught');
           await say('จับ' + nm(bt.foe) + 'ได้แล้ว!');
           noteCaught(bt.foe.sp);
           if (G.party.length < PARTY_MAX) G.party.push(bt.foe);
@@ -1289,6 +1307,7 @@
         } else {
           bt.capsule = null;
           await tween(200, (t) => { bt.spr.foe.alpha = t; });
+          AUDIO.sfx('breakout');
           await say('โธ่ มันหลุดออกมาได้!');
           await foeTurn();
         }
@@ -1300,6 +1319,7 @@
         G.bag[med]--;
         const from = bt.me.hp;
         bt.me.hp = Math.min(max, bt.me.hp + ITEMS[med].heal);
+        AUDIO.sfx('heal');
         await say('ใช้' + ITEMS[med].name + 'กับ' + nm(bt.me));
         await tween(350, (t) => { bt.hp.me = from + (bt.me.hp - from) * t; });
         await say('พลังชีวิตฟื้นขึ้น ' + (bt.me.hp - from) + ' แต้ม');
@@ -1311,16 +1331,19 @@
       }
     }
 
+    if (result === 'win') { AUDIO.music(null); AUDIO.sfx('victory'); }
     if (result === 'win' && trainer) await say('ชนะ' + trainer.name + 'แล้ว!');
     if (result === 'win') {
       const gold = Math.round(trainer ? foes.reduce((n, m) => n + m.level, 0) * GOLD_TRAINER : foes[0].level * GOLD_WILD);
       G.gold += gold;
+      AUDIO.sfx('coin');
       await say('ได้รับเหรียญทอง ' + gold + ' ทอง!');
     }
     if (result !== 'lose') for (const m of bt.evolving) await evolve(m);
     if (result === 'lose') await say('ไม่มีมอนสเตอร์ที่สู้ไหวแล้ว...\nคุณรีบพามอนสเตอร์กลับไปที่ศูนย์รักษา');
     await fadeTo(1, 240);
     bt = null; mode = 'world';
+    mapMusic();
     if (result === 'lose') {
       healParty();
       const spot = G.healSpot || HEAL_SPOT;
@@ -1726,6 +1749,7 @@
 
   async function title() {
     mode = 'title';
+    AUDIO.music('village');
     const saved = loadSave();
     const i = await choose(saved ? ['เล่นต่อ', 'เริ่มเกมใหม่'] : ['เริ่มเกมใหม่'], { x: 165, y: 258, w: 150, rowH: 22 });
     await fadeTo(1, 250);
@@ -1742,8 +1766,47 @@
     }
   }
 
+  // ---- install as an app (Windows): Edge / Chrome announce that the game can be installed;
+  // keep that offer and show our own button, which opens the browser's install dialog.
+  function setupInstall() {
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+    const btn = document.getElementById('btnInstall');
+    const ua = navigator.userAgentData;
+    const windows = ua && ua.platform ? ua.platform === 'Windows' : /Windows/i.test(navigator.userAgent);
+    const installed = window.matchMedia && window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
+    if (!btn || !windows || installed) return;
+    let offer = null;
+    window.addEventListener('beforeinstallprompt', (ev) => {
+      ev.preventDefault();               // no browser mini-bar; our button asks instead
+      offer = ev;
+      btn.hidden = false;
+    });
+    btn.addEventListener('click', async () => {
+      if (!offer) return;
+      btn.hidden = true;
+      offer.prompt();
+      const choice = await offer.userChoice.catch(() => null);
+      if (!choice || choice.outcome !== 'accepted') btn.hidden = false;   // still offered later
+      else offer = null;
+    });
+    window.addEventListener('appinstalled', () => { offer = null; btn.hidden = true; });
+  }
+
+  function setupSound() {
+    const btn = document.getElementById('btnSound');
+    const show = () => { if (btn) { btn.textContent = AUDIO.on ? '🔊' : '🔇'; btn.title = AUDIO.on ? 'ปิดเสียง (M)' : 'เปิดเสียง (M)'; } };
+    const flip = () => { AUDIO.toggle(); show(); };
+    if (btn) btn.addEventListener('click', (ev) => { ev.preventDefault(); flip(); btn.blur(); });
+    window.addEventListener('keydown', (ev) => { if ((ev.key === 'm' || ev.key === 'M') && !ev.repeat) flip(); });
+    show();
+  }
+
   async function boot() {
     setupTouch();
+    setupSound();
+    setupInstall();
     // The auto-play bot is for testing only: its button and the P key exist only when the
     // page is opened with ?bot in the address (e.g. index.html?bot or index.html?test&bot).
     const botBtn = document.getElementById('btnBot');
@@ -1933,7 +1996,7 @@
 
   // for testing from the browser console
   window.GAME = {
-    bot: (on, speed) => setBot(on, speed || 1), botState: () => ({ ...bot }),
+    bot: (on, speed) => setBot(on, speed || 1), botState: () => ({ ...bot }), sound: () => AUDIO.state,
     get state() { return { mode, busy, G, pl, bt, msg: ui.msg ? ui.msg.pages.map((p) => p.map((l) => l.join('')).join('\n')).join('\n') : null,
       menu: ui.menu ? { index: ui.menu.index, opts: ui.menu.opts.map((o) => o.label) } : null, prompt: ui.prompt }; },
     press, map: () => MAP, maps: () => MAPS,
