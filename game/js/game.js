@@ -103,7 +103,7 @@
 
   // ----------------------------------------------------------------- helpers
   const rand = (n) => Math.floor(Math.random() * n);
-  const nm = (m) => SPECIES[m.sp].name;
+  const nm = (m) => m.nick || SPECIES[m.sp].name;     // the nickname, or the species' name
   const expAt = (level) => level * level * level;
 
   function stats(m) {
@@ -215,10 +215,11 @@
   // ---- typing a line of text (the hero's name): an HTML box over the game, so phone
   // keyboards work. Resolves with the text, or null when cancelled.
   let textOpen = false;
-  function askText(title, value, maxLen) {
+  function askText(title, value, maxLen, hint) {
     const box = document.getElementById('nameBox'), input = document.getElementById('nameInput');
     const ok = document.getElementById('nameOk'), cancel = document.getElementById('nameCancel');
     document.getElementById('nameTitle').textContent = title;
+    document.getElementById('nameHint').textContent = hint || '';
     input.maxLength = maxLen; input.value = value || '';
     box.hidden = false; textOpen = true;
     setTimeout(() => { input.focus(); input.select(); }, 30);
@@ -238,8 +239,14 @@
     });
   }
   const DEFAULT_NAME = 'ต้นกล้า';
+  async function askNick(m) {
+    const v = await askText('ชื่อเล่นของ' + SPECIES[m.sp].name, m.nick || '', 10, 'สูงสุด 10 ตัว · เว้นว่างไว้ = เรียกว่า' + SPECIES[m.sp].name);
+    if (v === null) return false;
+    if (v && v !== SPECIES[m.sp].name) m.nick = v; else delete m.nick;
+    return true;
+  }
   async function askHeroName(first) {
-    const v = await askText(first ? 'ชื่อของคุณคืออะไร?' : 'เปลี่ยนชื่อตัวละคร', G.name || '', 12);
+    const v = await askText(first ? 'ชื่อของคุณคืออะไร?' : 'เปลี่ยนชื่อตัวละคร', G.name || '', 12, 'เว้นว่างไว้ = ' + DEFAULT_NAME);
     if (v === null && !first) return false;
     G.name = v || G.name || DEFAULT_NAME;
     save();
@@ -635,6 +642,9 @@
         G.flags.starter = sp;
         G.bag.capsule += 5; G.bag.potion += 3;
         await say('ได้รับ' + SPECIES[sp].name + 'มาเป็นคู่หูแล้ว!');
+        if (await yesNo('จะตั้งชื่อเล่นให้' + SPECIES[sp].name + 'ไหม?')) {
+          if (await askNick(G.party[0])) await say('ต่อไปนี้' + SPECIES[sp].name + 'ชื่อ ' + nm(G.party[0]) + ' แล้ว!');
+        }
         await say('นี่แคปซูล 5 ลูกกับยา 3 ขวด\nแคปซูลใช้จับมอนสเตอร์ป่าในพงหญ้าสูงทางใต้ของหมู่บ้าน');
         await say('ทำให้มันอ่อนแรงก่อนจะจับง่ายขึ้นมาก\nลองจับให้ครบทั้ง 6 ชนิดดูนะ');
         save();
@@ -1181,8 +1191,13 @@
       }
       const m = G.party[i];
       ui.card = m;                         // the monster's information card
-      const pick = await choose(['ตั้งเป็นตัวนำ', 'กลับ'], { x: 212, y: 262, w: 220, cols: 2, rowH: 24, cancellable: true });
+      const pick = await choose(['ตั้งเป็นตัวนำ', 'ชื่อเล่น', 'กลับ'], { x: 150, y: 262, w: 282, cols: 3, rowH: 24, cancellable: true });
       ui.card = null;
+      if (pick === 1) {
+        const before = nm(m);
+        if (await askNick(m)) await say(m.nick ? before + ' มีชื่อเล่นว่า ' + m.nick + ' แล้ว' : 'ลบชื่อเล่นแล้ว กลับไปเรียกว่า ' + nm(m));
+        continue;
+      }
       if (pick !== 0) continue;
       if (i > 0) {
         G.party.splice(i, 1);
@@ -1404,7 +1419,7 @@
       noteCaught(m.sp);
       await tween(420, (t) => { ui.flash = 1 - t; });
       AUDIO.sfx('fanfare');
-      await say('ยินดีด้วย! ' + oldName + 'วิวัฒนาการเป็น' + nm(m) + 'แล้ว!');
+      await say('ยินดีด้วย! ' + oldName + 'วิวัฒนาการเป็น' + SPECIES[m.sp].name + 'แล้ว!');
       // moves of the new form learned at a level already passed (it evolves late, at Lv.20 / 30)
       const had = SPECIES[oldSp].moves.map((x) => x[1]);
       for (const [lv, mv] of SPECIES[m.sp].moves) {
@@ -1597,6 +1612,7 @@
           AUDIO.music(null); AUDIO.sfx('caught');
           await say('จับ' + nm(bt.foe) + 'ได้แล้ว!');
           noteCaught(bt.foe.sp);
+          if (await yesNo('จะตั้งชื่อเล่นให้' + nm(bt.foe) + 'ไหม?')) await askNick(bt.foe);
           if (G.party.length < PARTY_MAX) G.party.push(bt.foe);
           else {
             bt.foe.hp = stats(bt.foe).hp; G.lab.push(bt.foe);
@@ -1919,8 +1935,9 @@
     const im = IMG['monsters/' + sp.img], k = 96 / Math.max(im.width, im.height);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(im, 102 - im.width * k / 2, 122 - im.height * k, im.width * k, im.height * k);
-    text(sp.name, 164, 42, 15, '#2b2420', 'left', true);
-    badge(sp.type, 170 + ctx.measureText(sp.name).width, 40);
+    const cardName = m.nick ? m.nick + ' (' + sp.name + ')' : sp.name;
+    text(cardName, 164, 42, 15, '#2b2420', 'left', true);
+    badge(sp.type, 170 + ctx.measureText(cardName).width, 40);
     text('Lv.' + m.level, 428, 42, 12, '#5a5048', 'right');
     const tier = rarityOf(m.sp);
     text(tier.name + ' ' + tier.stars, 428, 121, 11, tier.color, 'right', true);
@@ -2312,6 +2329,7 @@
     bot.cool -= dt;
     if (bot.cool > 0) return;
     bot.cool = 0.12;
+    if (textOpen) { document.getElementById('nameOk').click(); return; }
     if (ui.wait) { press('ok', false); return; }
     if (ui.menu) {
       const m = ui.menu, i = botMenuPick(m);
