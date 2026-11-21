@@ -1517,6 +1517,29 @@
     await fadeTo(0, 240);
   }
 
+  // ---- the objective guide: what to do next in the story, shown at the top while walking.
+  // The first step not yet done is the goal; "where" is the map it happens on.
+  const QUEST = [
+    { done: () => !!G.flags.starter, where: 'village', text: 'ไปพบศาสตราจารย์สนที่ลานกลางหมู่บ้าน เพื่อรับมอนสเตอร์คู่หู' },
+    { done: () => !!G.flags.rivalBeaten, where: 'village', text: 'ประลองกับพายุ ที่ยืนขวางถนนทางใต้ของหมู่บ้าน' },
+    { done: () => !!G.flags.badge1, where: 'route1', text: 'เดินลงใต้ไปเส้นทางที่ 1 แล้วท้ายิมศิลา ชนะหัวหน้ายิมเพื่อรับเหรียญศิลา' },
+    { done: () => !!G.flags.stage3, where: 'route2', text: 'ผ่านด่านตรวจทางใต้ของเส้นทางที่ 1 แล้วชนะพายุที่ปลายเส้นทางที่ 2' },
+    { done: () => !!G.flags.badge2, where: 'town', text: 'เดินทางต่อไปตลาดน้ำบางบัว แล้วท้ายิมวารีทางตะวันออกของตลาด' },
+    { done: () => !!G.flags.stage5, where: 'ruins', text: 'ลงใต้ไปซากเมืองโบราณ แล้วชนะพายุที่ประตูเมืองเก่า' },
+  ];
+  // how to get from this map to the goal's map (the stages run north to south)
+  const MAP_ORDER = ['village', 'route1', 'route2', 'town', 'ruins'];
+  function questNow() {
+    if (!G) return null;
+    const q = QUEST.find((x) => !x.done());
+    if (!q) return { text: 'ผ่านทุกด่านแล้ว! ด่าน 6 จะมาในเวอร์ชันถัดไป · ลองจับมอนสเตอร์ให้ครบ หรือต่อสู้ออนไลน์', hint: '' };
+    const here = MAP_ORDER.indexOf(MAP.indoor ? (ROOMS[MAP.id] && ROOMS[MAP.id].from) || 'village' : MAP.id);
+    const there = MAP_ORDER.indexOf(q.where);
+    const hint = MAP.indoor ? 'ออกจากอาคารก่อน' : here < 0 || there < 0 || here === there ? '' : here < there ? 'ไปทางใต้' : 'ย้อนขึ้นเหนือ';
+    return { text: q.text, hint };
+  }
+  const goalUi = { last: null, glow: 0 };
+
   async function teamScreen() {
     let at = 0;
     for (;;) {
@@ -1532,10 +1555,16 @@
       at = i;
       if (i === G.party.length) {          // more: the type table, online, renaming
         const k = await choose(['ดูตารางแพ้ธาตุ', ONLINE.loggedIn ? 'ออนไลน์ / อันดับ (' + ONLINE.username + ')' : 'ออนไลน์ / อันดับ',
-          'เปลี่ยนชื่อตัวละคร', 'กลับ'], { x: 130, y: 90, w: 220, rowH: 26, cancellable: true, title: 'เมนูอื่น ๆ' });
+          'เปลี่ยนชื่อตัวละคร', G.flags.hideGoal ? 'แสดงเป้าหมายบนจอ' : 'ซ่อนเป้าหมายบนจอ', 'กลับ'],
+          { x: 130, y: 80, w: 220, rowH: 26, cancellable: true, title: 'เมนูอื่น ๆ' });
         if (k === 0) { ui.chart = true; await anyKey(); ui.chart = false; }
         else if (k === 1) await onlineMenu(false);
         else if (k === 2 && (await askHeroName(false))) await say('เปลี่ยนชื่อเป็น {ชื่อ} แล้ว');
+        else if (k === 3) {
+          G.flags.hideGoal = !G.flags.hideGoal; save();
+          const q = questNow();
+          await say(G.flags.hideGoal ? 'ซ่อนเป้าหมายแล้ว' : 'เป้าหมายตอนนี้ : ' + (q ? q.text : ''));
+        }
         continue;
       }
       const m = G.party[i];
@@ -1571,6 +1600,11 @@
     if (MAP.id === 'village' && !G.flags.legendMet) {
       G.wilds = (G.wilds || 0) + 1;
       if (G.wilds >= LEGEND_AFTER) { await legendEncounter(); return; }
+    }
+    if (Math.random() < ZODIAC_CHANCE) {
+      const e = ENCOUNTERS[area];
+      await battle([makeMon(ZODIAC[rand(ZODIAC.length)], e.levels[1] + ZODIAC_LEVEL_UP)], null, { zodiac: true });
+      return;
     }
     await battle([pickWild(area)], null);
   }
@@ -1629,8 +1663,15 @@
     } else {
       await tween(300, (t) => { bt.spr.foe.dx = 220 * (1 - t); });
       const tier = SPECIES[bt.foe.sp].rarity;
-      if (tier === 'rare') AUDIO.sfx('rare');
-      await say((tier === 'rare' ? '✦ มอนสเตอร์หายาก! ' : '') + nm(bt.foe) + 'ป่าปรากฏตัว!');
+      if (tier === 'zodiac') {
+        AUDIO.sfx('rare');
+        for (let i = 0; i < 3; i++) { await tween(80, (t) => { ui.flash = 0.6 * t; }); await tween(80, (t) => { ui.flash = 0.6 * (1 - t); }); }
+        AUDIO.sfx('fanfare');
+        await say('✦✦ ดวงดาวส่องประกาย... มอนสเตอร์ราศีปรากฏตัว!\n' + nm(bt.foe) + ' ★★★★ ลงมาจากฟากฟ้า');
+      } else {
+        if (tier === 'rare') AUDIO.sfx('rare');
+        await say((tier === 'rare' ? '✦ มอนสเตอร์หายาก! ' : '') + nm(bt.foe) + 'ป่าปรากฏตัว!');
+      }
       noteSeen();
     }
     tween(260, (t) => { bt.spr.me.dx = -220 * (1 - t); });
@@ -1891,7 +1932,17 @@
     bt.legend = !!opts.legend;
     if (opts.legend) result = await legendLoop();
 
+    let fleeCheckedAt = 0;
     while (!result) {
+      if (opts.zodiac && bt.foe.hp > 0 && bt.round > fleeCheckedAt) {
+        fleeCheckedAt = bt.round;
+        if (Math.random() < ZODIAC_FLEE) {
+          await tween(900, (t) => { bt.spr.foe.dy = -200 * t * t; bt.spr.foe.alpha = 1 - t; });
+          await say(nm(bt.foe) + 'ลอยกลับขึ้นสู่ฟากฟ้าไปแล้ว...\nไว้พบกันใหม่เมื่อดวงดาวเรียงตัวอีกครั้ง');
+          result = 'fled';
+          break;
+        }
+      }
       ui.prompt = nm(bt.me) + 'จะทำอะไรดี?';
       const act = await choose([
         'ต่อสู้', { label: 'แคปซูล', right: 'x' + itemCount('ball') },
@@ -1948,7 +1999,7 @@
         await tween(420, (t) => { bt.capsule.x = from.x + (to.x - from.x) * t; bt.capsule.y = from.y + (to.y - from.y) * t - Math.sin(t * Math.PI) * 60; });
         await tween(220, (t) => { bt.spr.foe.alpha = 1 - t; });
         await tween(260, (t) => { bt.capsule.y = to.y + (SPOT.foe.y - 12 - to.y) * t * t; });
-        const chance = Math.min(0.95, 0.6 * ITEMS[ball].rate * (1 - 0.66 * bt.foe.hp / stats(bt.foe).hp));
+        const chance = Math.min(0.95, 0.6 * ITEMS[ball].rate * (rarityOf(bt.foe.sp).catch || 1) * (1 - 0.66 * bt.foe.hp / stats(bt.foe).hp));
         const caught = Math.random() < chance;
         const shakes = caught ? 3 : rand(3);
         for (let i = 0; i < shakes; i++) {
@@ -2367,6 +2418,27 @@
       box(240 - w / 2, by, w, 28);
       text(ui.banner.text, 240, by + 19, 13, '#2b2420', 'center', true);
     }
+    // the objective guide, at the top while walking (hidden behind the place name, messages and menus)
+    if (mode === 'world' && G && !G.flags.hideGoal && !ui.banner && !ui.msg && !ui.menu && !ui.card && !ui.chart) {
+      const q = questNow();
+      if (q) {
+        if (goalUi.last !== null && goalUi.last !== q.text) { goalUi.glow = 3; AUDIO.sfx('levelup'); }
+        goalUi.last = q.text;
+        const line = '◆ เป้าหมาย : ' + q.text + (q.hint ? '  (' + q.hint + ')' : '');
+        const lines = wrap(line, 400, 11);
+        setFont(11, true);                // measured bold: the widest it is ever drawn
+        const w = Math.min(460, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 30), h = 10 + lines.length * 15;
+        const y = 6 - uiTop();
+        ctx.globalAlpha = 0.93;
+        box(240 - w / 2, y, w, h);
+        ctx.globalAlpha = 1;
+        if (goalUi.glow > 0) {
+          ctx.strokeStyle = 'rgba(255,196,64,' + Math.min(1, goalUi.glow) + ')'; ctx.lineWidth = 2;
+          roundRect(240 - w / 2 - 1, y - 1, w + 2, h + 2, 7); ctx.stroke();
+        }
+        lines.forEach((l, i) => text(l, 240, y + 17 + i * 15, 11, '#2b2420', 'center', i === 0 && goalUi.glow > 0));
+      }
+    }
     if (ui.chart) drawTypeChart();
     if (ui.card) drawCard(ui.card);
     if (ui.menu) drawMenu(ui.menu);
@@ -2386,6 +2458,7 @@
     }
     if (ui.msg) ui.msg.shown += dt * 48;
     if (ui.banner && (ui.banner.t += dt) > 2.6) ui.banner = null;
+    if (goalUi.glow > 0) goalUi.glow = Math.max(0, goalUi.glow - dt);
     updateVirtual(dt);
     if (mode === 'world') updateWorld(dt);
   }

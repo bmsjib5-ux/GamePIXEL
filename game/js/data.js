@@ -98,6 +98,11 @@ const MOVES = {
   star_field:     { name: 'ทุ่งดาวหิ่งห้อย', type: 'electric', power: 85 },
   floating_isle:  { name: 'เกาะลอยพิฆาต', type: 'leaf', power: 85 },
   phoenix_dive:   { name: 'ดิ่งเพลิงสุริยา', type: 'fire', power: 85 },
+  // the zodiac spirits' moves
+  star_roar:     { name: 'คำรามดารา',       type: 'normal',   power: 70 },
+  sun_crown:     { name: 'มงกุฎสุริยา',      type: 'fire',     power: 90 },
+  star_fall:     { name: 'ดาวตกกลางน้ำ',    type: 'ghost',    power: 70 },
+  twin_tide:     { name: 'วงวารีแฝดดารา',   type: 'water',    power: 90 },
   // strongest move of each final evolution
   inferno_horn:   { name: 'เขาเพลิงผลาญ',    type: 'fire',     power: 85 },
   tidal_spiral:   { name: 'เกลียวคลื่นยักษ์', type: 'water',    power: 85 },
@@ -329,7 +334,8 @@ const RARITY = {
   common:   { name: 'ธรรมดา',    stars: '★',    color: '#8a8478', enc: 1 },
   uncommon: { name: 'ไม่ธรรมดา', stars: '★★',   color: '#2f8a3a', enc: 0.6 },
   rare:     { name: 'หายาก',     stars: '★★★',  color: '#3f6fd0', enc: 0.25 },
-  legend:   { name: 'ตำนาน',     stars: '★★★★', color: '#c98a10', enc: 0 },
+  zodiac:   { name: 'ราศี',      stars: '★★★★',  color: '#7d4fd0', enc: 0, catch: 0.35 },   // see ZODIAC below
+  legend:   { name: 'ตำนาน',     stars: '★★★★★', color: '#c98a10', enc: 0 },   // above the zodiac spirits (★★★★)
 };
 // Each family (named by its first form): its rarity, then the terms of each evolution step,
 // [level, gym stone needed or nothing]. Only rare monsters need a stone from a gym.
@@ -364,6 +370,19 @@ for (const [first, [rarity, ...steps]] of Object.entries(FAMILY)) {
   }
 }
 SPECIES.legend.rarity = 'legend';
+
+// ---- The zodiac spirits (★★★★): cute but strong, no evolution. Either can appear in the
+// tall grass of any stage, but only rarely (ZODIAC_CHANCE of wild encounters), a little above
+// the zone's levels. They are hard to catch (the tier's "catch" multiplies the chance) and
+// each turn there is a ZODIAC_FLEE chance that they float back up to the sky.
+SPECIES.leo = { name: 'สิงห์สุริยา', type: 'fire', img: 'zodiac_fire_leo', rarity: 'zodiac',
+                hp: 70, atk: 88, def: 66, spd: 82,
+                moves: [[1, 'tackle'], [1, 'ember'], [1, 'star_roar'], [1, 'sun_crown']] };
+SPECIES.pisces = { name: 'มีนดาราคู่', type: 'water', img: 'zodiac_water_pisces', rarity: 'zodiac',
+                   hp: 78, atk: 72, def: 76, spd: 80,
+                   moves: [[1, 'bubble'], [1, 'pond_splash'], [1, 'star_fall'], [1, 'twin_tide']] };
+const ZODIAC = ['leo', 'pisces'];
+const ZODIAC_CHANCE = 0.01, ZODIAC_LEVEL_UP = 2, ZODIAC_FLEE = 0.10;
 
 const STARTERS = ['lamb', 'narwhal', 'pangolin'];
 // the species the professor asks you to collect (evolved forms do not count separately)

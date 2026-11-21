@@ -359,6 +359,14 @@ for group, base in BASE_NAMES.items():
             new_strips.append(lineup(src + "_back.png", [n + "_back" for n in names], cell, cell, "monsters",
                                      f"{group}_{stage}_back_{cell}x{cell}.png", 28, match=names))
 
+# The zodiac spirits: two on one sheet, front and back, in a large cell (they are the strongest catchable ones).
+if os.path.exists(os.path.join(SRC, "monsters_zodiac.png")):
+    zn = ["zodiac_fire_leo", "zodiac_water_pisces"]
+    new_strips.append(lineup("monsters_zodiac.png", zn, 80, 80, "monsters", "zodiac_80x80.png", 32, each=True))
+    if os.path.exists(os.path.join(SRC, "monsters_zodiac_back.png")):
+        new_strips.append(lineup("monsters_zodiac_back.png", [n + "_back" for n in zn], 80, 80, "monsters",
+                                 "zodiac_back_80x80.png", 32, match=zn))
+
 # The legendary monster: one sprite on its own sheet, front view only, in a final-form cell.
 if os.path.exists(os.path.join(SRC, "monsters_legend.png")):
     new_strips.append(lineup("monsters_legend.png", ["legend_sky_elephant"], 88, 88, "monsters",
