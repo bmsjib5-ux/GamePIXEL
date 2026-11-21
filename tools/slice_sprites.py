@@ -367,6 +367,14 @@ if os.path.exists(os.path.join(SRC, "monsters_zodiac.png")):
         new_strips.append(lineup("monsters_zodiac_back.png", [n + "_back" for n in zn], 80, 80, "monsters",
                                  "zodiac_back_80x80.png", 32, match=zn))
 
+# The second pair of zodiac spirits, on their own sheet, the same way.
+if os.path.exists(os.path.join(SRC, "monsters_zodiac2.png")):
+    zn = ["zodiac_rock_taurus", "zodiac_electric_scorpio"]
+    new_strips.append(lineup("monsters_zodiac2.png", zn, 80, 80, "monsters", "zodiac2_80x80.png", 32, each=True))
+    if os.path.exists(os.path.join(SRC, "monsters_zodiac2_back.png")):
+        new_strips.append(lineup("monsters_zodiac2_back.png", [n + "_back" for n in zn], 80, 80, "monsters",
+                                 "zodiac2_back_80x80.png", 32, match=zn))
+
 # The legendary monster: one sprite on its own sheet, front view only, in a final-form cell.
 if os.path.exists(os.path.join(SRC, "monsters_legend.png")):
     new_strips.append(lineup("monsters_legend.png", ["legend_sky_elephant"], 88, 88, "monsters",

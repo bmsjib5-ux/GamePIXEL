@@ -284,6 +284,7 @@ function buildVillage() {
   object('lotus', 3, 22, { flat: true }); object('lotus', 6, 24, { flat: true }); object('lotus', 4, 25, { flat: true });
   object('bush_berry', 22, 12); object('bush', 9, 19); object('bush', 26, 13);
   object('rocks', 11, 27); object('boulder', 19, 25); object('boulder', 27, 10); object('rocks', 5, 20);
+  object('box_kiosk', 20, 9, { id: 'box_kiosk' });   // monster storage kiosk
   object('sala', 21, 22, { id: 'sala' });          // an open Thai pavilion on the cobbled court
   object('signpost_thai', 13, 14, { id: 'sign_village' });
   object('signpost_thai', 17, 30, { id: 'sign_route' });
@@ -379,6 +380,7 @@ function buildRoute1() {
   object('bush', 16, 6); object('bush_berry', 3, 9); object('bush', 19, 9); object('bush', 18, 15);
   object('bush_berry', 22, 27); object('bush', 8, 20); object('bush', 24, 33);
   object('rocks', 12, 6); object('boulder', 24, 29); object('rocks', 3, 16); object('boulder', 17, 21); object('rocks', 22, 22);
+  object('box_kiosk', 11, 26, { id: 'box_kiosk' });   // monster storage kiosk
   object('well', 9, 28, { id: 'spring' });
   object('signpost_thai', 16, 2, { id: 'sign_r1_top' });
   object('signpost_thai', 8, 11, { id: 'sign_r1_bridge' });
@@ -454,6 +456,7 @@ function buildRoute2() {
   object('rocks', 12, 8); object('boulder', 17, 8); object('rocks', 26, 13); object('boulder', 16, 23);
   object('boulder', 7, 23); object('rocks', 14, 32); object('boulder', 21, 29); object('rocks', 26, 23);
   object('bush', 16, 12); object('bush_berry', 7, 16); object('bush', 26, 27); object('bush_berry', 2, 12);
+  object('box_kiosk', 13, 28, { id: 'box_kiosk' });   // monster storage kiosk
   object('well', 10, 29, { id: 'spring' });
   object('signpost_thai', 16, 2, { id: 'sign_r2_top' });
   object('signpost_thai', 14, 29, { id: 'sign_r2_spring' });
@@ -525,6 +528,7 @@ function buildTown() {
   object('baskets', 12, 18); object('water_jar', 13, 18); object('baskets', 20, 18);
   object('lamp_post', 9, 21); object('lamp_post', 21, 18);
   object('sala', 18, 19, { id: 'sala' });
+  object('box_kiosk', 17, 18, { id: 'box_kiosk' });   // monster storage kiosk
   object('bench', 11, 21);
   // on the water: long-tail boats and lotus
   object('boat', 4, 23, { flat: true }); object('boat', 7, 25, { flat: true });
@@ -604,6 +608,7 @@ function buildRuins() {
                         [19, 22], [25, 22], [13, 35], [18, 36], [3, 36], [8, 35], [25, 37]]) {
     object(rng() < 0.5 ? 'boulder' : 'rocks', c, r);
   }
+  object('box_kiosk', 11, 14, { id: 'box_kiosk' });   // monster storage kiosk
   object('well', 12, 16, { id: 'spring' });
   object('sala', 17, 15, { id: 'sala' });
   object('lamp_post', 11, 19); object('lamp_post', 19, 19);

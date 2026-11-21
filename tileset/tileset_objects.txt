@@ -33,5 +33,6 @@ baskets, 1312, 64, 32, 32
 ox_cart, 1344, 32, 64, 64
 food_cart, 1408, 32, 64, 64
 bench, 1472, 64, 64, 32
-bridge_deck_ew, 1536, 64, 32, 32
-bridge_deck_ns, 1568, 64, 32, 32
+box_kiosk, 1536, 32, 32, 64
+bridge_deck_ew, 1568, 64, 32, 32
+bridge_deck_ns, 1600, 64, 32, 32

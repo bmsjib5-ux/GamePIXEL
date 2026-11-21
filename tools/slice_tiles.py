@@ -594,6 +594,13 @@ if os.path.exists(os.path.join(SRC, "tileset_objects.png")):
                 s = min(f for f, o in zip(fit, OBJ_THAI) if o[3] == group)
             tw, th = max(1, round((b[2] - b[0]) * s)), max(1, round((b[3] - b[1]) * s))
             objects[name] = on_canvas(reduce_palette(resample(a, b, tw, th), 20), fw, fh)
+    # the monster storage kiosk, drawn on its own sheet: one tile wide, two tall
+    if os.path.exists(os.path.join(SRC, "object_box_kiosk.png")):
+        k = despeckle(load("object_box_kiosk.png"))
+        kb = piece_grid(k, 1, 1)[0]
+        ks = min(32 / (kb[2] - kb[0]), 64 / (kb[3] - kb[1]))
+        objects["box_kiosk"] = on_canvas(reduce_palette(resample(k, kb, max(1, round((kb[2] - kb[0]) * ks)),
+                                                              max(1, round((kb[3] - kb[1]) * ks))), 24), 32, 64)
     objects.update(bridge_layers)   # the decks alone, to lay over any water tile
     obj_sheet = pack(objects, "objects", "tileset_objects")
     print("objects:", len(objects))

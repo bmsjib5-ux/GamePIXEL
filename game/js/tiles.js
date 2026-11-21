@@ -59,6 +59,14 @@ const SPRITE_META = {
    "y0": 5,
    "y1": 32
   },
+  "box_kiosk": {
+   "w": 32,
+   "h": 64,
+   "x0": 0,
+   "x1": 32,
+   "y0": 7,
+   "y1": 64
+  },
   "bridge_deck_ew": {
    "w": 32,
    "h": 32,

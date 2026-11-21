@@ -103,6 +103,10 @@ const MOVES = {
   sun_crown:     { name: 'มงกุฎสุริยา',      type: 'fire',     power: 90 },
   star_fall:     { name: 'ดาวตกกลางน้ำ',    type: 'ghost',    power: 70 },
   twin_tide:     { name: 'วงวารีแฝดดารา',   type: 'water',    power: 90 },
+  laurel_charge: { name: 'พุ่งชัยพฤกษ์',     type: 'leaf',     power: 70 },
+  earth_stars:   { name: 'ธรณีพฤษภดารา',   type: 'rock',     power: 90 },
+  star_sting:    { name: 'เหล็กในดารา',      type: 'ghost',    power: 70 },
+  tail_thunder:  { name: 'หางอัสนีพิจิก',    type: 'electric', power: 90 },
   // strongest move of each final evolution
   inferno_horn:   { name: 'เขาเพลิงผลาญ',    type: 'fire',     power: 85 },
   tidal_spiral:   { name: 'เกลียวคลื่นยักษ์', type: 'water',    power: 85 },
@@ -381,7 +385,13 @@ SPECIES.leo = { name: 'สิงห์สุริยา', type: 'fire', img: 'z
 SPECIES.pisces = { name: 'มีนดาราคู่', type: 'water', img: 'zodiac_water_pisces', rarity: 'zodiac',
                    hp: 78, atk: 72, def: 76, spd: 80,
                    moves: [[1, 'bubble'], [1, 'pond_splash'], [1, 'star_fall'], [1, 'twin_tide']] };
-const ZODIAC = ['leo', 'pisces'];
+SPECIES.taurus = { name: 'พฤษภศิลาดาว', type: 'rock', img: 'zodiac_rock_taurus', rarity: 'zodiac',
+                   hp: 86, atk: 80, def: 85, spd: 55,
+                   moves: [[1, 'tackle'], [1, 'pebble'], [1, 'laurel_charge'], [1, 'earth_stars']] };
+SPECIES.scorpio = { name: 'พิจิกอัสนี', type: 'electric', img: 'zodiac_electric_scorpio', rarity: 'zodiac',
+                    hp: 66, atk: 86, def: 68, spd: 86,
+                    moves: [[1, 'tackle'], [1, 'spark'], [1, 'star_sting'], [1, 'tail_thunder']] };
+const ZODIAC = ['leo', 'pisces', 'taurus', 'scorpio'];
 const ZODIAC_CHANCE = 0.01, ZODIAC_LEVEL_UP = 2, ZODIAC_FLEE = 0.10;
 
 const STARTERS = ['lamb', 'narwhal', 'pangolin'];
