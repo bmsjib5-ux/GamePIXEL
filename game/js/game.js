@@ -2080,6 +2080,61 @@
 
   // Attack effects: small pixel particles drawn over the target, one look per move type.
   // fx = { type, x, y (centre of the target), t (0..1), strong }
+  // ---- The glow around the special monsters: the zodiac spirits (violet and gold) and the
+  // legend (gold). Built once per sprite: the sprite's outline grown by a few pixels, in two
+  // colours, drawn behind the sprite and gently pulsing, with a few stars twinkling around it.
+  const AURA_COLORS = { zodiac: ['#b48cff', '#ffe58a'], legend: ['#ffc94a', '#fff3b8'] };
+  const auraCache = new Map();
+  function auraOf(im, tier) {
+    const key = im.src + '|' + tier;
+    if (auraCache.has(key)) return auraCache.get(key);
+    const P = 4, W = im.width + 2 * P, H = im.height + 2 * P;
+    const sil = document.createElement('canvas'); sil.width = W; sil.height = H;
+    const out = document.createElement('canvas'); out.width = W; out.height = H;
+    const sc = sil.getContext('2d'), oc = out.getContext('2d');
+    const ring = (color, radius, alpha) => {
+      sc.clearRect(0, 0, W, H); sc.globalCompositeOperation = 'source-over';
+      sc.drawImage(im, P, P); sc.globalCompositeOperation = 'source-in';
+      sc.fillStyle = color; sc.fillRect(0, 0, W, H);
+      oc.globalAlpha = alpha;
+      for (let dy = -radius; dy <= radius; dy++)
+        for (let dx = -radius; dx <= radius; dx++)
+          if (dx * dx + dy * dy <= radius * radius + 1) oc.drawImage(sil, dx, dy);
+    };
+    const [outer, inner] = AURA_COLORS[tier];
+    ring(outer, 3, 0.35);
+    ring(inner, 1, 0.9);
+    oc.globalAlpha = 1;
+    const a = { img: out, pad: P };
+    auraCache.set(key, a);
+    return a;
+  }
+  function hasAura(sp) { return !!AURA_COLORS[SPECIES[sp].rarity]; }
+  // draws the glow for a sprite about to be drawn at (x, y) with size (w, h) on canvas c
+  function drawAura(c, sp, im, x, y, w, h, alpha = 1) {
+    const tier = SPECIES[sp].rarity, a = auraOf(im, tier), k = w / im.width;
+    const pulse = 0.55 + 0.45 * Math.sin(clock * 2.6);
+    c.save();
+    c.imageSmoothingEnabled = false;
+    c.globalAlpha = alpha * (0.5 + 0.4 * pulse);
+    c.drawImage(a.img, Math.round(x - a.pad * k), Math.round(y - a.pad * k), a.img.width * k, a.img.height * k);
+    // four little stars that twinkle in turn around the monster
+    const star = AURA_COLORS[tier][1], s = Math.max(1, Math.round(k));
+    for (let i = 0; i < 4; i++) {
+      const t = (clock * 0.7 + i / 4) % 1, glow = Math.sin(t * Math.PI);
+      if (glow < 0.15) continue;
+      const ang = i * 1.9 + Math.floor(clock * 0.7 + i / 4) * 2.3;
+      const sx = Math.round(x + w / 2 + Math.cos(ang) * w * 0.46), sy = Math.round(y + h * 0.5 + Math.sin(ang) * h * 0.42);
+      c.globalAlpha = alpha * glow;
+      c.fillStyle = star;
+      c.fillRect(sx - s, sy - 3 * s, 2 * s, 6 * s);
+      c.fillRect(sx - 3 * s, sy - s, 6 * s, 2 * s);
+      c.fillStyle = '#ffffff';
+      c.fillRect(sx - s, sy - s, 2 * s, 2 * s);
+    }
+    c.restore();
+  }
+
   function drawFx(fx) {
     const t = fx.t, n = fx.strong ? 1.5 : 1;
     const rnd = (i, k) => { const v = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return v - Math.floor(v); };
@@ -2186,6 +2241,7 @@
       const w = im.width * 2, h = im.height * 2, drop = Math.round((h - 128) / 4);
       let top = SPOT[side].y + drop - h;
       if (side === 'foe') top = Math.max(4, top);
+      if (hasAura(m.sp)) drawAura(b, m.sp, im, Math.round(SPOT[side].x - w / 2 + s.dx), Math.round(top + s.dy), w, h, b.globalAlpha);
       b.drawImage(im, Math.round(SPOT[side].x - w / 2 + s.dx), Math.round(top + s.dy), w, h);
       b.globalAlpha = 1;
     };
@@ -2337,6 +2393,7 @@
     ctx.fillStyle = '#e9f0d8'; roundRect(52, 24, 100, 100, 6); ctx.fill();
     const im = IMG['monsters/' + sp.img], k = 96 / Math.max(im.width, im.height);
     ctx.imageSmoothingEnabled = false;
+    if (hasAura(m.sp)) drawAura(ctx, m.sp, im, 102 - im.width * k / 2, 122 - im.height * k, im.width * k, im.height * k);
     ctx.drawImage(im, 102 - im.width * k / 2, 122 - im.height * k, im.width * k, im.height * k);
     const cardName = m.nick ? m.nick + ' (' + sp.name + ')' : sp.name;
     text(cardName, 164, 42, 15, '#2b2420', 'left', true);
