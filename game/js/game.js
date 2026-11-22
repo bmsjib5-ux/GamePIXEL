@@ -195,6 +195,35 @@
   const words = (s) => wordSeg ? Array.from(wordSeg.segment(s), (x) => x.segment) : graphemes(s);
   const setFont = (px, bold) => { ctx.font = (bold ? 'bold ' : '') + px + 'px ' + FONT; };
 
+  // Fit one line into maxW: try smaller sizes down to minPx, then cut it short with "…".
+  // Returns the text and the size to draw it at (the font is left set to that size).
+  function fitText(str, maxW, px, bold, minPx = px) {
+    str = String(str);
+    for (let p = px; p >= minPx; p--) {
+      setFont(p, bold);
+      if (ctx.measureText(str).width <= maxW) return { s: str, px: p };
+    }
+    const g = graphemes(str);
+    while (g.length > 1 && ctx.measureText(g.join('') + '…').width > maxW) g.pop();
+    return { s: g.join('') + '…', px: minPx };
+  }
+  // the width a menu needs to show all of its text
+  function menuNeed(opts, o, cols) {
+    let row = 0;
+    for (const x of opts) {
+      setFont(13); let w = ctx.measureText(x.label).width + 26;
+      if (x.badge) { setFont(10, true); w += ctx.measureText(TYPES[x.badge].name).width + 18; }
+      if (x.right) { setFont(11); w += ctx.measureText(x.right).width + 6; }
+      if (x.hp) w += 158;
+      if (x.sub) { setFont(10); w = Math.max(w, ctx.measureText(x.sub).width + 26); }
+      row = Math.max(row, w);
+    }
+    let need = row * cols + 16;
+    if (o.title) { setFont(13, true); need = Math.max(need, ctx.measureText(o.title).width + 28); }
+    if (o.footer) { setFont(11); need = Math.max(need, ctx.measureText(o.footer).width + 28); }
+    return Math.ceil(need);
+  }
+
   function wrap(text, maxW, px) {
     setFont(px || 13);
     const lines = [];
@@ -279,10 +308,12 @@
       const rows = Math.ceil(opts.length / cols);
       const titleH = o.title ? 22 : 0, footH = o.footer ? 20 : 0;
       const h = Math.max(o.minH || 0, rows * rowH + 14 + titleH + footH);
-      const w = o.w || 150;
+      const w0 = o.w || 150, w = Math.max(w0, Math.min(menuNeed(opts, o, cols), o.maxW || VW - 8));
+      // a wider menu grows to both sides, but stays on the screen
+      const x = o.x === undefined ? VW - w - 8 : Math.max(4, Math.min((o.maxRight || VW - 4) - w, Math.round(o.x - (w - w0) / 2)));
       ui.menu = {
         opts, cols, rowH, w, h, titleH, title: o.title, footer: o.footer,
-        x: o.x !== undefined ? o.x : VW - w - 8, y: o.y !== undefined ? o.y : 228 - h,
+        x, y: o.y !== undefined ? o.y : 228 - h,
         index: firstOpen(opts, Math.min(o.start || 0, opts.length - 1)), cancellable: !!o.cancellable, onMove: o.onMove, resolve,
         kind: o.kind, data: o.data,
       };
@@ -1028,7 +1059,7 @@
   // show the monster's card and ask to go ahead
   async function confirmWithCard(m, yes) {
     ui.card = m;
-    const pick = await choose([yes, 'กลับ'], { x: 212, y: 262, w: 220, cols: 2, rowH: 24, cancellable: true });
+    const pick = await choose([yes, 'กลับ'], { x: 212, y: 262, w: 220, maxW: 376, maxRight: 432, cols: 2, rowH: 24, cancellable: true });
     ui.card = null;
     return pick === 0;
   }
@@ -2301,7 +2332,7 @@
 
   function drawMenu(m) {
     box(m.x, m.y, m.w, m.h);
-    if (m.title) text(m.title, m.x + 14, m.y + 22, 13, '#2b2420', 'left', true);
+    if (m.title) { const t = fitText(m.title, m.w - 28, 13, true, 11); text(t.s, m.x + 14, m.y + 22, t.px, '#2b2420', 'left', true); }
     const cellW = (m.w - 16) / m.cols;
     m.opts.forEach((o, i) => {
       const cx = m.x + 8 + (i % m.cols) * cellW;
@@ -2311,8 +2342,13 @@
         ctx.fillStyle = '#efe6c8'; roundRect(cx + 1, cy + 1, cellW - 2, m.rowH - 2, 4); ctx.fill();
         text('▶', cx + 5, mid - 1, 9, '#c0442f');
       }
-      text(o.label, cx + 18, mid, 13, o.disabled ? '#a39c8c' : '#2b2420');
-      if (o.sub) text(o.sub, cx + 18, cy + 28, 10, o.subColor || '#5a5048');
+      let room = cellW - 26;
+      if (o.badge) { setFont(10, true); room -= ctx.measureText(TYPES[o.badge].name).width + 18; }
+      if (o.right) { setFont(11); room -= ctx.measureText(o.right).width + 6; }
+      if (o.hp) room -= 158;
+      const lab = fitText(o.label, room, 13, false, 13);
+      text(lab.s, cx + 18, mid, 13, o.disabled ? '#a39c8c' : '#2b2420');
+      if (o.sub) text(fitText(o.sub, cellW - 26, 10).s, cx + 18, cy + 28, 10, o.subColor || '#5a5048');
       let right = cx + cellW - 8;
       if (o.hp) {
         text(Math.ceil(o.hp[0]) + '/' + o.hp[1], right, mid, 11, '#5a5048', 'right');
@@ -2322,11 +2358,11 @@
       if (o.right) { text(o.right, right, mid, 11, '#5a5048', 'right'); setFont(11); right -= ctx.measureText(o.right).width + 6; }
       if (o.badge) {
         setFont(13);
-        const lx = cx + 18 + ctx.measureText(o.label).width + 8;
+        const lx = cx + 18 + ctx.measureText(lab.s).width + 8;
         badge(o.badge, lx, mid - 2);
       }
     });
-    if (m.footer) text(m.footer, m.x + 14, m.y + m.h - 10, 11, '#5a5048');
+    if (m.footer) text(fitText(m.footer, m.w - 28, 11).s, m.x + 14, m.y + m.h - 10, 11, '#5a5048');
   }
 
   function drawMessage(m) {
@@ -2343,23 +2379,31 @@
   function drawHud() {
     // foe: top left
     box(12, 12, 198, 42);
-    text(nm(bt.foe), 24, 31, 13, '#2b2420', 'left', true);
-    badge(SPECIES[bt.foe.sp].type, 30 + ctx.measureText(nm(bt.foe)).width, 29);
-    text(bt.foe.infinite ? 'Lv.∞' : 'Lv.' + bt.foe.level, 198, 31, bt.foe.infinite ? 13 : 11, bt.foe.infinite ? '#c08a12' : '#5a5048', 'right', !!bt.foe.infinite);
+    hudName(bt.foe, 24, 31, 198, bt.foe.infinite ? 'Lv.∞' : 'Lv.' + bt.foe.level, !!bt.foe.infinite);
     text('HP', 24, 45, 9, '#c0442f', 'left', true);
     hpBar(42, 38, 156, bt.hp.foe, stats(bt.foe).hp);
     // mine: right, above the text box
     const max = stats(bt.me).hp;
     box(270, 172, 198, 58);
-    text(nm(bt.me), 282, 191, 13, '#2b2420', 'left', true);
-    badge(SPECIES[bt.me.sp].type, 288 + ctx.measureText(nm(bt.me)).width, 189);
-    text('Lv.' + bt.me.level, 456, 191, 11, '#5a5048', 'right');
+    hudName(bt.me, 282, 191, 456, 'Lv.' + bt.me.level, false);
     text('HP', 282, 205, 9, '#c0442f', 'left', true);
     hpBar(300, 198, 156, bt.hp.me, max);
     text(Math.ceil(bt.hp.me) + ' / ' + max, 456, 221, 11, '#5a5048', 'right');
     const lo = expAt(bt.me.level), hi = expAt(bt.me.level + 1);
     ctx.fillStyle = '#d6cdb4'; ctx.fillRect(282, 216, 110, 3);
     ctx.fillStyle = '#4a8fd8'; ctx.fillRect(282, 216, 110 * Math.max(0, Math.min(1, (bt.me.exp - lo) / (hi - lo))), 3);
+  }
+
+  // A monster's name, its type badge and its level on one line from x to right.
+  function hudName(m, x, y, right, lv, gold) {
+    setFont(gold ? 13 : 11, gold);
+    const lvW = ctx.measureText(lv).width;
+    setFont(10, true);
+    const badgeW = ctx.measureText(TYPES[SPECIES[m.sp].type].name).width + 10;
+    const t = fitText(nm(m), right - x - lvW - badgeW - 14, 13, true, 10);
+    text(t.s, x, y, t.px, '#2b2420', 'left', true);
+    badge(SPECIES[m.sp].type, x + 6 + ctx.measureText(t.s).width, y - 2);
+    text(lv, right, y, gold ? 13 : 11, gold ? '#c08a12' : '#5a5048', 'right', gold);
   }
 
   // Row of type badges; returns the x after the last one.
@@ -2395,9 +2439,11 @@
     ctx.imageSmoothingEnabled = false;
     if (hasAura(m.sp)) drawAura(ctx, m.sp, im, 102 - im.width * k / 2, 122 - im.height * k, im.width * k, im.height * k);
     ctx.drawImage(im, 102 - im.width * k / 2, 122 - im.height * k, im.width * k, im.height * k);
-    const cardName = m.nick ? m.nick + ' (' + sp.name + ')' : sp.name;
-    text(cardName, 164, 42, 15, '#2b2420', 'left', true);
-    badge(sp.type, 170 + ctx.measureText(cardName).width, 40);
+    setFont(12); const lvW = ctx.measureText('Lv.' + m.level).width;
+    setFont(10, true); const badgeW = ctx.measureText(TYPES[sp.type].name).width + 10;
+    const cardName = fitText(m.nick ? m.nick + ' (' + sp.name + ')' : sp.name, 428 - 164 - lvW - badgeW - 16, 15, true, 11);
+    text(cardName.s, 164, 42, cardName.px, '#2b2420', 'left', true);
+    badge(sp.type, 170 + ctx.measureText(cardName.s).width, 40);
     text('Lv.' + m.level, 428, 42, 12, '#5a5048', 'right');
     const tier = rarityOf(m.sp);
     text(tier.name + ' ' + tier.stars, 428, 121, 11, tier.color, 'right', true);
