@@ -75,7 +75,8 @@
     const names = ['terrain', 'battle_bg', 'chars/hero', 'chars/npc_researcher', 'chars/npc_rival',
       'chars/npc_shopkeeper', 'chars/npc_healer', 'chars/rival_large',
       'chars/npc_gym_leader', 'chars/npc_gym_hiker', 'chars/npc_gym_kid',
-      'chars/npc_gym2_leader', 'chars/npc_gym2_rower', 'chars/npc_gym2_swimmer'];
+      'chars/npc_gym2_leader', 'chars/npc_gym2_rower', 'chars/npc_gym2_swimmer',
+      'chars/npc_gym3_leader', 'chars/npc_gym3_picker', 'chars/npc_gym3_climber'];
     for (const n of Object.keys(SPRITE_META.objects)) names.push('objects/' + n);
     for (const n of Object.keys(SPRITE_META.buildings)) names.push('buildings/' + n);
     for (const n of Object.keys(SPRITE_META.furniture)) names.push('furniture/' + n);
@@ -506,7 +507,7 @@
 
   // --------------------------------------------------------------- overworld
   // background tune of each map: the routes and the Rock Gym have their own, the rest share the village's
-  const mapMusic = () => AUDIO.music(['route1', 'route2', 'gym', 'ruins'].includes(MAP.id) ? 'route' : 'village');
+  const mapMusic = () => AUDIO.music(['route1', 'route2', 'gym', 'ruins', 'doi', 'gym3', 'bay'].includes(MAP.id) ? 'route' : 'village');
   function setMap(id) {
     MAP = MAPS[id] || MAPS.village;
     if (mode !== 'battle') mapMusic();
@@ -854,7 +855,7 @@
       'แพ้แล้วครับ... เดี๋ยวพาควายไปแช่น้ำในคูเมืองก่อนนะ',
       'พงหญ้าทางใต้มีมอนสเตอร์ร่างสุดท้ายซ่อนอยู่ด้วยนะพี่ ผมเคยเห็นแวบ ๆ'); },
     async rival4() {
-      if (G.flags.stage5) { await say('ทางไปด่าน 6 อยู่หลังประตูเมืองเก่านี่แหละ\nแต่ได้ยินว่ายังไปไม่ได้ ไว้รอดูกันนะ!'); return; }
+      if (G.flags.stage5) { await say('ทางใต้ของประตูเมืองเก่าคือดอยหมอกเย็น (ด่าน 6)\nได้ยินว่าบนดอยมียิมอัสนีด้วย ไปลองดูสิ!'); return; }
       if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปดื่มน้ำพุในลานเมืองก่อนเถอะ'); return; }
       await say('มาถึงซากเมืองโบราณจนได้นะ {ชื่อ}! ตั้งแต่แพ้นายครั้งก่อน\nฉันฝึกหนักมาตลอดทางเลยนะ');
       await say('ทีมฉันตอนนี้มีสี่ตัวแล้ว คราวนี้ไม่ยอมแพ้ง่าย ๆ แน่!');
@@ -865,13 +866,100 @@
       G.bag.capsule_gold += 3; G.bag.potion_plus += 3;
       await say('...ยังเป็นนายที่เก่งกว่าอยู่ดี แต่ฉันจะตามให้ทันแน่!');
       await say('ได้รับแคปซูลทอง 3 ลูกและยาชั้นดี 3 ขวด!');
-      await say('ยินดีด้วย! คุณผ่านด่าน 5 แล้ว\nทางไปด่าน 6 อยู่หลังประตูเมืองเก่า (จะเปิดในเวอร์ชันถัดไป)');
+      await say('ยินดีด้วย! คุณผ่านด่าน 5 แล้ว\nทางใต้ของประตูเมืองเก่าคือด่าน 6 ดอยหมอกเย็น');
       save();
     },
     async ruin_prasat() { await say('จารึกบนแผ่นหินเลือนลาง...\n"ณ เมืองนี้ ช้างเผือกแห่งฟ้าเคยลงมาเยือน"'); },
     async sign_t5_top() { await say('ซากเมืองโบราณ\nทิศเหนือ : ตลาดน้ำบางบัว   ทิศใต้ : ประตูเมืองเก่า'); },
     async sign_t5_court() { await say('ลานเมืองเก่า\nน้ำพุยังใช้ฟื้นพลังได้ และมีพ่อค้าเร่แวะมาขายของ'); },
-    async sign_t5_end() { await say('ประตูเมืองเก่า ทางไปด่าน 6\nคู่แข่งของคุณรออยู่ตรงนี้'); },
+    async sign_t5_end() { await say('ประตูเมืองเก่า ทางไปดอยหมอกเย็น (ด่าน 6)\nคู่แข่งของคุณรออยู่ตรงนี้'); },
+
+    // ---- Doi Mok Yen and the Thunder Gym (stage 6)
+    async r6_rower() { await gymTrainer(DOI_TRAINERS.rower, 'r6_rower',
+      'ลุงพายเรือมาทั้งชีวิต วันนี้ขอขึ้นดอยมาชมไร่ชาบ้าง!\nแต่ถ้าเจอคนเก่ง ๆ ลุงก็ขอประลองหน่อย',
+      'ฮ่า ๆ ขาลุงสั่นเพราะอากาศหนาวหรือเพราะแพ้ก็ไม่รู้!',
+      'ยิ่งขึ้นสูง หมอกยิ่งหนา ระวังพงหญ้าในป่าสนด้วยล่ะ'); },
+    async r6_kid() { await gymTrainer(DOI_TRAINERS.kid, 'r6_kid',
+      'คืนนี้ฟ้าจะเปิด หนูขึ้นมารอดูดาว!\nระหว่างรอ มาประลองกันก่อนนะ',
+      'ว้าว... พี่เก่งเหมือนดาวตกเลย!',
+      'ได้ยินว่ามอนสเตอร์ราศีลงมาจากฟ้าได้ทุกที่ บนดอยนี้ก็อาจจะเจอนะพี่'); },
+    async gym3_climber() { await gymTrainer(GYM3.climber, 'gym3_climber',
+      'พาคนขึ้นดอยมาสิบปี เจอพายุฝนมาไม่รู้กี่ลูก!\nมาดูกันว่าเธอจะฝ่าฟ้าผ่าของยิมนี้ไปได้ไหม',
+      'เก่งมาก! เดินต่อไปได้เลย หัวหน้ายิมรออยู่หลังแถวเสาโคมข้างหน้า',
+      'ธาตุไฟฟ้าแพ้ทางหิน แต่ชนะทางน้ำ จำไว้ให้ดีล่ะ'); },
+    async gym3_picker() { await gymTrainer(GYM3.picker, 'gym3_picker',
+      'เก็บชาตอนเช้า ฝึกมอนสเตอร์ตอนบ่าย!\nใบชาของหนูหอม แต่มอนสเตอร์ของหนูช็อตแรงนะ',
+      'แพ้แล้ว... หัวหน้ายิมรออยู่ด้านในเลยค่ะ',
+      'หัวหน้ายิมชอบออกตัวเร็ว ถ้ามีมอนสเตอร์ธาตุหินจะช่วยได้มาก'); },
+    async gym3_leader() {
+      const g = GYM3.leader;
+      if (G.flags[g.flag]) { await say('เหรียญอัสนีส่องประกายสวยเลย\nลงดอยทางใต้ไปจะถึงอ่าวดาวทะเล (ด่าน 7) ขอให้โชคดีนะ'); return; }
+      if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของเธอหมดแรงหมดแล้ว ไปดื่มน้ำพุที่จุดพักกลางดอยก่อนเถอะ'); return; }
+      await say('ยินดีต้อนรับสู่ยิมอัสนี! ผมคือฟ้าคราม หัวหน้ายิมแห่งนี้\nผมเฝ้าดูพายุบนยอดดอยนี้มาทั้งชีวิต');
+      await say('ฟ้าผ่ามาไวกว่าเสียงฟ้าร้องเสมอ\nมาดูกันว่าเธอจะตามความเร็วของสายฟ้าทันไหม!');
+      const result = await battle(g.team.map(([sp, lv]) => makeMon(sp, lv)), { name: g.name, sheet: 'chars/npc_gym3_leader' });
+      if (result !== 'win') return;
+      G.flags[g.flag] = true;
+      G.bag.potion_plus += 4; G.bag.capsule_gold += 3; G.gold += 1500;
+      await say('ยอดเยี่ยม {ชื่อ}! เธอเร็วกว่าสายฟ้าของผมอีก\nรับเหรียญอัสนีนี้ไป เป็นหลักฐานว่าเธอชนะยิมแห่งนี้');
+      await say('ได้รับเหรียญอัสนี ยาชั้นดี 4 ขวด แคปซูลทอง 3 ลูก และเหรียญทอง 1500 ทอง!');
+      await say('ยินดีด้วย! คุณผ่านด่าน 6 แล้ว\nลงดอยทางใต้ไปคือด่าน 7 อ่าวดาวทะเล');
+      save();
+    },
+    async gym3_books() { await say('ตำรายิมอัสนี\n"ธาตุไฟฟ้าชนะน้ำ แต่แพ้ทางหิน"'); },
+    async sign_t6_top() { await say('ดอยหมอกเย็น\nทิศเหนือ : ซากเมืองโบราณ   ทิศใต้ : ยอดดอยและยิมอัสนี'); },
+    async sign_t6_rest() { await say('จุดพักกลางดอย\nน้ำพุใช้ฟื้นพลังได้ และมีพ่อค้าเร่แวะมาขายของ'); },
+    async sign_t6_gym() { await say('ยิมอัสนี\nหัวหน้ายิม : ฟ้าคราม ผู้เฝ้าพายุแห่งดอยหมอกเย็น'); },
+    async sign_t6_end() { await say('ทางลงดอยด้านใต้ ไปอ่าวดาวทะเล (ด่าน 7)\nต้องมีเหรียญอัสนีจากยิมจึงจะผ่านได้'); },
+
+    // ---- Ao Dao Thale (stage 7)
+    async r7_fisher() { await gymTrainer(BAY_TRAINERS.fisher, 'r7_fisher',
+      'ออกเรือตั้งแต่ตีสี่ เพิ่งกลับมาถึงฝั่ง!\nมอนสเตอร์ทะเลของลุงตัวเบ้อเริ่มเลยนะ มาลองดูไหม',
+      'โอ้โห แรงกว่าคลื่นลมมรสุมอีก!',
+      'พะยูนหายากมาก ถ้าเจอในพงหญ้าริมหาดล่ะก็ รีบจับไว้เลยนะ'); },
+    async r7_swimmer() { await gymTrainer(BAY_TRAINERS.swimmer, 'r7_swimmer',
+      'หนูเพิ่งดำน้ำดูปะการังมา เจอแมงกะพรุนช็อตเพียบเลย!\nมาประลองกันหน่อยนะ',
+      'แพ้แล้ว... ขอไปนอนผึ่งแดดบนหาดก่อนนะ',
+      'สังข์วิญญาณชอบอยู่ในพงหญ้าทางใต้ของหมู่บ้าน เสียงมันหลอนนิด ๆ'); },
+    async rival5() {
+      if (G.flags.stage7) { await say('ทางใต้ของอ่าวคือด่าน 8\nแต่ได้ยินว่ายังไปไม่ได้ ไว้รอดูกันนะ!'); return; }
+      if (!G.party.some((m) => m.hp > 0)) { await say('มอนสเตอร์ของนายหมดแรงหมดแล้ว ไปดื่มน้ำพุในหมู่บ้านชาวประมงก่อนเถอะ'); return; }
+      await say('ในที่สุดก็มาถึงทะเลจนได้! ฉันรอนายอยู่ตรงนี้ทั้งวันเลยนะ');
+      await say('ทีมฉันตอนนี้มีห้าตัวแล้ว แถมได้เพื่อนใหม่จากทะเลมาด้วย\nคราวนี้ฉันจะชนะนายให้ได้!');
+      const team = RIVAL_BAY.map(([sp, lv]) => makeMon(sp === 'starter3' ? RIVAL_PICK[G.flags.starter] + '3' : sp, lv));
+      const result = await battle(team, { name: 'พายุ', img: 'chars/rival_large' });
+      if (result !== 'win') return;
+      G.flags.stage7 = true;
+      G.bag.capsule_gold += 5; G.bag.potion_plus += 5; G.gold += 2000;
+      await say('...นายนี่มันเก่งจริง ๆ เลย ฉันยอมรับแล้วล่ะ\nแต่การเดินทางของเรายังไม่จบหรอกนะ!');
+      await say('ได้รับแคปซูลทอง 5 ลูก ยาชั้นดี 5 ขวด และเหรียญทอง 2000 ทอง!');
+      await say('ยินดีด้วย! คุณผ่านด่าน 7 แล้ว\nทางใต้ของอ่าวคือด่าน 8 (จะเปิดในเวอร์ชันถัดไป)');
+      save();
+    },
+    async sign_t7_top() { await say('อ่าวดาวทะเล\nทิศเหนือ : ดอยหมอกเย็น   ทิศใต้ : ปลายหาด'); },
+    async sign_t7_village() { await say('หมู่บ้านชาวประมง\nน้ำพุใช้ฟื้นพลังได้ และมีพ่อค้าเร่แวะมาขายของ'); },
+    async sign_t7_pier() { await say('ท่าเรือไม้\nได้ยินว่าปลายสะพานมีลังของที่ชาวประมงลืมไว้'); },
+    async sign_t7_end() { await say('ปลายหาด ทางไปด่าน 8\nคู่แข่งของคุณรออยู่ตรงนี้'); },
+    async t7_crate_a() {
+      if (G.flags.t7a) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.t7a = true; G.bag.capsule_gold += 4; G.bag.potion_plus += 2;
+      await say('เปิดลังไม้ดู...\nพบแคปซูลทอง 4 ลูก และยาชั้นดี 2 ขวด!'); save();
+    },
+    async t7_crate_b() {
+      if (G.flags.t7b) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.t7b = true; G.bag.stone_water += 1; G.gold += 1200;
+      await say('เปิดลังไม้ดู...\nพบหินวิวัฒน์วารี 1 ก้อน และเหรียญทอง 1200 ทอง!'); save();
+    },
+    async t6_crate_a() {
+      if (G.flags.t6a) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.t6a = true; G.bag.potion_plus += 3; G.bag.capsule_gold += 2;
+      await say('เปิดลังไม้ดู...\nพบยาชั้นดี 3 ขวด และแคปซูลทอง 2 ลูก!'); save();
+    },
+    async t6_crate_b() {
+      if (G.flags.t6b) { await say('ลังไม้ว่างเปล่า'); return; }
+      G.flags.t6b = true; G.bag.stone_rock += 1; G.bag.stone_water += 1; G.gold += 1000;
+      await say('เปิดลังไม้ดู...\nพบหินวิวัฒน์ศิลา หินวิวัฒน์วารี อย่างละก้อน และเหรียญทอง 1000 ทอง!'); save();
+    },
     async t5_crate_a() {
       if (G.flags.t5a) { await say('ลังไม้ว่างเปล่า'); return; }
       G.flags.t5a = true; G.bag.potion_plus += 3;
@@ -1558,13 +1646,15 @@
     { done: () => !!G.flags.stage3, where: 'route2', text: 'ผ่านด่านตรวจทางใต้ของเส้นทางที่ 1 แล้วชนะพายุที่ปลายเส้นทางที่ 2' },
     { done: () => !!G.flags.badge2, where: 'town', text: 'เดินทางต่อไปตลาดน้ำบางบัว แล้วท้ายิมวารีทางตะวันออกของตลาด' },
     { done: () => !!G.flags.stage5, where: 'ruins', text: 'ลงใต้ไปซากเมืองโบราณ แล้วชนะพายุที่ประตูเมืองเก่า' },
+    { done: () => !!G.flags.badge3, where: 'doi', text: 'ขึ้นดอยหมอกเย็น แล้วท้ายิมอัสนี ชนะหัวหน้ายิมเพื่อรับเหรียญอัสนี' },
+    { done: () => !!G.flags.stage7, where: 'bay', text: 'ลงจากดอยไปอ่าวดาวทะเล แล้วชนะพายุที่ปลายหาด' },
   ];
   // how to get from this map to the goal's map (the stages run north to south)
-  const MAP_ORDER = ['village', 'route1', 'route2', 'town', 'ruins'];
+  const MAP_ORDER = ['village', 'route1', 'route2', 'town', 'ruins', 'doi', 'bay'];
   function questNow() {
     if (!G) return null;
     const q = QUEST.find((x) => !x.done());
-    if (!q) return { text: 'ผ่านทุกด่านแล้ว! ด่าน 6 จะมาในเวอร์ชันถัดไป · ลองจับมอนสเตอร์ให้ครบ หรือต่อสู้ออนไลน์', hint: '' };
+    if (!q) return { text: 'ผ่านทุกด่านแล้ว! ด่าน 8 จะมาในเวอร์ชันถัดไป · ลองจับมอนสเตอร์ให้ครบ หรือต่อสู้ออนไลน์', hint: '' };
     const here = MAP_ORDER.indexOf(MAP.indoor ? (ROOMS[MAP.id] && ROOMS[MAP.id].from) || 'village' : MAP.id);
     const there = MAP_ORDER.indexOf(q.where);
     const hint = MAP.indoor ? 'ออกจากอาคารก่อน' : here < 0 || there < 0 || here === there ? '' : here < there ? 'ไปทางใต้' : 'ย้อนขึ้นเหนือ';
@@ -1582,7 +1672,7 @@
         x: 50, y: 24, w: 380, rowH: 30, cancellable: true, start: at,
         title: G.party.length ? 'ทีมของ' + (G.name || DEFAULT_NAME) + '  (เลือกเพื่อดูข้อมูล)' : 'ยังไม่มีมอนสเตอร์ในทีม',
         footer: 'ทอง ' + G.gold + '   แคปซูล ' + itemCount('ball') + '   ยา ' + itemCount('heal')
-          + '   จับได้ ' + goalCaught().length + '/6   เหรียญตรา ' + ((G.flags.badge1 ? 1 : 0) + (G.flags.badge2 ? 1 : 0)) });
+          + '   จับได้ ' + goalCaught().length + '/6   เหรียญตรา ' + ((G.flags.badge1 ? 1 : 0) + (G.flags.badge2 ? 1 : 0) + (G.flags.badge3 ? 1 : 0)) });
       if (i < 0) break;
       at = i;
       if (i === G.party.length) {          // more: the type table, online, renaming

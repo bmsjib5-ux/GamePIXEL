@@ -111,6 +111,8 @@ const ROOMS = {
   // stage 4 (the town): a second healing centre (laid out like the first) and the Water Gym
   heal2: { w: 11, h: 8, exit: 5, door: [6, 15], from: 'town', kind: 'heal' },
   gym2:  { w: 13, h: 12, exit: 6, door: [24, 15], from: 'town' },
+  // stage 6 (Doi Mok Yen): the Thunder Gym
+  gym3:  { w: 13, h: 12, exit: 6, door: [22, 35], from: 'doi', floor: 'cobble' },
 };
 
 function buildRoom(id) {
@@ -200,6 +202,20 @@ function buildRoom(id) {
     m.npcs.push({ id: 'gym2_rower', sheet: 'chars/npc_gym2_rower', c: 6, r: 5, dir: 'down',
                   moved: { flag: 'g2b', c: 7, r: 6, dir: 'left' } });
     m.npcs.push({ id: 'gym2_leader', sheet: 'chars/npc_gym2_leader', c: 6, r: 3, dir: 'down' });
+  } else if (id === 'gym3') {
+    // Two rows of lantern posts and rocks cross the hall; a trainer stands in the only gap
+    // of each and steps aside once beaten. The leader waits on the rug at the far end.
+    f('rug', 5, 3, { walkable: true, flat: true });
+    for (const row of [5, 8]) {
+      for (let c = 0; c < spec.w; c++) if (c !== 6) o(c % 2 ? 'lamp_post' : 'rocks', c, row);
+    }
+    f('plant', 0, 2); f('plant', 12, 2); f('plant', 0, 11); f('plant', 12, 11);
+    f('bookshelf', 1, 2, { id: 'gym3_books' }); f('bookshelf', 10, 2, { id: 'gym3_books' });
+    m.npcs.push({ id: 'gym3_climber', sheet: 'chars/npc_gym3_climber', c: 6, r: 8, dir: 'down',
+                  moved: { flag: 'g3a', c: 7, r: 9, dir: 'left' } });
+    m.npcs.push({ id: 'gym3_picker', sheet: 'chars/npc_gym3_picker', c: 6, r: 5, dir: 'down',
+                  moved: { flag: 'g3b', c: 7, r: 6, dir: 'left' } });
+    m.npcs.push({ id: 'gym3_leader', sheet: 'chars/npc_gym3_leader', c: 6, r: 3, dir: 'down' });
   } else if (id === 'mill') {
     f('millstone', 3, 4, { id: 'mill_stone' });
     f('sacks', 0, 2); f('sacks', 1, 2); f('sacks', 7, 6, { id: 'mill_sacks' }); f('sacks', 8, 6);
@@ -629,15 +645,166 @@ function buildRuins() {
   m.npcs.push({ id: 'r5_herder', sheet: 'chars/npc_gym_kid', c: 17, r: 29, dir: 'left' });
   m.npcs.push({ id: 'rival4', sheet: 'chars/npc_rival', c: 15, r: 36, dir: 'up' });
   m.exits.push({ side: 'up', c0: 14, c1: 16, to: { map: 'town', dc: 0, r: T4_H - 1 } });
-  m.exits.push({ side: 'down', c0: 14, c1: 16, to: null, need: 'stage5',
-                 lockedText: 'พายุยืนขวางประตูเมืองเก่าอยู่\nต้องประลองชนะเขาก่อนจึงจะผ่านไปได้',
-                 soonText: 'ประตูเมืองเก่าเปิดออก ทางไปด่าน 6 อยู่ข้างหน้าแล้ว!\nแต่ด่าน 6 ยังอยู่ระหว่างสร้าง จะตามมาในเวอร์ชันถัดไป' });
+  m.exits.push({ side: 'down', c0: 14, c1: 16, to: { map: 'doi', dc: 0, r: 0 }, need: 'stage5',
+                 lockedText: 'พายุยืนขวางประตูเมืองเก่าอยู่\nต้องประลองชนะเขาก่อนจึงจะผ่านไปได้' });
   return m;
 }
 
+// Stage 6: Doi Mok Yen, a misty highland. Tea terraces on the way up, rocky ledges, a rest
+// stop with a spring, a mountain lake, a pine forest, and the Thunder Gym near the top.
+// Its badge clears stage 6; stage 7 is not built yet.
+const T6_W = 30, T6_H = 40;
+function buildDoi() {
+  const rng = seededRandom(20261124);
+  const B = mapBuilder('doi', T6_W, T6_H, 'grass');
+  const m = B.m, ground = m.ground, block = B.block;
+  m.title = 'ด่าน 6  ดอยหมอกเย็น';
+  for (let r = 0; r < T6_H; r++) for (let c = 0; c < T6_W; c++) {
+    const v = rng();
+    ground[r][c] = v < 0.66 ? 'grass' : v < 0.90 ? 'grass_tufts' : v < 0.97 ? 'grass_white_flowers' : 'grass_color_flowers';
+  }
+  const put = (layout) => { for (const [k, name] of layout) { const [c, r] = k.split(',').map(Number); ground[r][c] = name; } };
+
+  // the mountain road runs down the middle; a side path leads to the gym's door
+  put(stripLayout('path', rect(14, 0, 16, 39), cells(line(17, 36, 22, 36)), true, T6_W, T6_H));
+  put(autotile('plaza', rect(10, 15, 20, 19), false, T6_W, T6_H));              // the rest stop
+  // rocky ledges across the slope, with a gap for the road
+  put(autotile('plateau', rect(2, 11, 12, 12), false, T6_W, T6_H));
+  put(autotile('plateau', rect(18, 11, 27, 12), false, T6_W, T6_H));
+  put(autotile('plateau', rect(2, 33, 9, 35), false, T6_W, T6_H));
+  // a small mountain lake beside the rest stop
+  put(stripLayout('pond', rect(22, 14, 27, 19), new Set(), false, T6_W, T6_H));
+
+  // tea terraces on the way up, the misty pine forest further down
+  const grass = [[rect(2, 2, 11, 9), 'route_k'], [rect(19, 2, 27, 9), 'route_k'],
+                 [rect(2, 22, 12, 31), 'route_l'], [rect(18, 22, 27, 28), 'route_l']];
+  for (const [set, area] of grass) {
+    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = 'tall_grass'; m.tall.set(k, area); }
+  }
+  blockTerrain(m, block);
+  placeBuilding(B, 'gym', 'gym3');        // the Thunder Gym, south-east, near the top of the hill
+
+  const object = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
+  const treeKinds = ['tree_pine', 'tree_pine', 'tree_round', 'bamboo', 'tree_pine', 'tree_apple'];
+  const pick = () => treeKinds[Math.floor(rng() * treeKinds.length)];
+  for (let c = 0; c < T6_W; c += 2) if (c < 12 || c > 16) object(pick(), c, 0);
+  for (let r = 2; r < T6_H; r += 2) { object(pick(), 0, r); object(pick(), 28, r); }
+  for (let r = 0; r < T6_H; r++) { block(0, r); block(1, r); block(28, r); block(29, r); }
+  for (let c = 0; c < T6_W; c++) if (c < 13 || c > 17) block(c, 0);
+  for (let c = 2; c < 28; c++) if (c < 14 || c > 16) object('fence_h', c, 39);
+
+  // pines in the forest, stones on the slope
+  for (const [c, r] of [[12, 21], [17, 24], [17, 31], [5, 38], [10, 37], [25, 38], [20, 30], [11, 34]]) {
+    object('tree_pine', c, r);
+  }
+  for (const [c, r] of [[12, 10], [18, 10], [3, 14], [8, 20], [21, 21], [26, 21], [3, 37], [26, 31]]) {
+    object(rng() < 0.5 ? 'boulder' : 'rocks', c, r);
+  }
+  object('well', 12, 17, { id: 'spring' });
+  object('box_kiosk', 11, 15, { id: 'box_kiosk' });   // monster storage kiosk
+  object('sala', 18, 16, { id: 'sala' });
+  object('lamp_post', 10, 19); object('lamp_post', 20, 19);
+  object('bench', 19, 18);
+  object('lotus', 23, 15, { flat: true }); object('lotus', 26, 18, { flat: true });
+  object('spirit_house', 3, 16, { id: 'spirit_house' });
+  object('signpost_thai', 17, 2, { id: 'sign_t6_top' });
+  object('signpost_thai', 13, 14, { id: 'sign_t6_rest' });
+  object('signpost_thai', 18, 35, { id: 'sign_t6_gym' });
+  object('signpost_thai', 17, 38, { id: 'sign_t6_end' });
+  object('crate', 27, 10, { id: 't6_crate_a' });
+  object('crate', 2, 32, { id: 't6_crate_b' });
+
+  m.things.sort((a, b) => a.sortY - b.sortY);
+  m.npcs.push({ id: 'vendor', sheet: 'chars/npc_shopkeeper', c: 17, r: 18, dir: 'left' });
+  m.npcs.push({ id: 'r6_rower', sheet: 'chars/npc_gym2_rower', c: 13, r: 6, dir: 'right' });
+  m.npcs.push({ id: 'r6_kid', sheet: 'chars/npc_gym_kid', c: 17, r: 26, dir: 'left' });
+  m.exits.push({ side: 'up', c0: 14, c1: 16, to: { map: 'ruins', dc: 0, r: T5_H - 1 } });
+  m.exits.push({ side: 'down', c0: 14, c1: 16, to: { map: 'bay', dc: 0, r: 0 }, need: 'badge3',
+                 lockedText: 'ทางลงดอยด้านใต้ถูกปิดไว้: "ผู้ที่จะผ่านต้องมีเหรียญอัสนี"\nไปท้าประลองที่ยิมอัสนีทางตะวันออกเฉียงใต้ก่อน' });
+  return m;
+}
+
+// Stage 7: Ao Dao Thale, a bay at the foot of the mountain. Beach grass on the way down, a
+// fishing village with a spring, the sea along the east side with a wooden pier, rough grass
+// in the south, and the rival waiting at the far end of the beach. Beating him clears stage 7.
+const T7_W = 30, T7_H = 40;
+function buildBay() {
+  const rng = seededRandom(20261125);
+  const B = mapBuilder('bay', T7_W, T7_H, 'grass');
+  const m = B.m, ground = m.ground, block = B.block;
+  m.title = 'ด่าน 7  อ่าวดาวทะเล';
+  for (let r = 0; r < T7_H; r++) for (let c = 0; c < T7_W; c++) {
+    const v = rng();
+    ground[r][c] = v < 0.66 ? 'grass' : v < 0.90 ? 'grass_tufts' : v < 0.96 ? 'grass_white_flowers' : 'grass_color_flowers';
+  }
+  const put = (layout) => { for (const [k, name] of layout) { const [c, r] = k.split(',').map(Number); ground[r][c] = name; } };
+
+  // the beach along the sea, the road down the middle, the village square on the west side
+  for (let r = 10; r < T7_H; r++) for (let c = 17; c <= 20; c++) ground[r][c] = 'sand';
+  put(stripLayout('path', rect(14, 0, 16, 39), new Set(), true, T7_W, T7_H));
+  put(autotile('plaza', rect(3, 17, 12, 21), false, T7_W, T7_H));
+  // the sea runs off the east and south edges of the map
+  put(stripLayout('pond', rect(21, 10, 29, 39), new Set(), true, T7_W, T7_H));
+  // a wooden pier out over the water
+  for (let c = 21; c <= 25; c++) ground[30][c] = 'bridge_h';
+
+  // beach grass on the way down, rough grass south of the village
+  const grass = [[rect(2, 2, 11, 7), 'route_m'], [rect(19, 2, 27, 7), 'route_m'], [rect(2, 24, 11, 33), 'route_n']];
+  for (const [set, area] of grass) {
+    for (const k of set) { const [c, r] = k.split(',').map(Number); ground[r][c] = 'tall_grass'; m.tall.set(k, area); }
+  }
+  blockTerrain(m, block);
+  decoBuilding(B, 'house_teal', 5, 15);
+  decoBuilding(B, 'house_red', 10, 15);
+
+  const object = (name, c, r, opts) => B.sprite('objects', name, c, r, opts);
+  const treeKinds = ['coconut_palm', 'coconut_palm', 'banana_tree', 'tree_mango', 'coconut_palm'];
+  const pick = () => treeKinds[Math.floor(rng() * treeKinds.length)];
+  for (let c = 0; c < T7_W; c += 2) if (c < 12 || c > 16) object(pick(), c, 0);
+  for (let r = 2; r < T7_H; r += 2) object(pick(), 0, r);
+  for (let r = 2; r < 10; r += 2) object(pick(), 28, r);
+  for (let r = 0; r < T7_H; r++) { block(0, r); block(1, r); }
+  for (let r = 0; r < 10; r++) { block(28, r); block(29, r); }
+  for (let c = 0; c < T7_W; c++) if (c < 13 || c > 17) block(c, 0);
+  for (let c = 2; c < 21; c++) if (c < 14 || c > 16) object('fence_h', c, 39);
+
+  // the village square
+  object('well', 4, 20, { id: 'spring' });
+  object('box_kiosk', 7, 18, { id: 'box_kiosk' });   // monster storage kiosk
+  object('sala', 9, 19, { id: 'sala' });
+  object('lamp_post', 3, 17); object('lamp_post', 12, 21);
+  object('baskets', 6, 21); object('water_jar', 12, 17);
+  object('spirit_house', 2, 22, { id: 'spirit_house' });
+  // the beach and the sea
+  for (const [c, r] of [[18, 12], [20, 17], [18, 23], [20, 34]]) object('coconut_palm', c, r);
+  object('boulder', 19, 15); object('rocks', 17, 36);
+  object('boat', 22, 28, { flat: true }); object('boat', 23, 32, { flat: true }); object('boat', 26, 14, { flat: true });
+  object('baskets', 19, 29); object('barrel', 19, 31);
+  object('signpost_thai', 17, 2, { id: 'sign_t7_top' });
+  object('signpost_thai', 13, 17, { id: 'sign_t7_village' });
+  object('signpost_thai', 20, 28, { id: 'sign_t7_pier' });
+  object('signpost_thai', 17, 38, { id: 'sign_t7_end' });
+  object('crate', 25, 30, { id: 't7_crate_a' });     // at the end of the pier
+  object('crate', 2, 36, { id: 't7_crate_b' });
+  for (const [c, r] of [[12, 10], [3, 36], [9, 36], [12, 23]]) object(rng() < 0.5 ? 'boulder' : 'rocks', c, r);
+
+  m.things.sort((a, b) => a.sortY - b.sortY);
+  m.npcs.push({ id: 'vendor', sheet: 'chars/npc_shopkeeper', c: 8, r: 20, dir: 'down' });
+  m.npcs.push({ id: 'r7_fisher', sheet: 'chars/npc_gym2_rower', c: 13, r: 27, dir: 'right' });
+  m.npcs.push({ id: 'r7_swimmer', sheet: 'chars/npc_gym2_swimmer', c: 18, r: 20, dir: 'left' });
+  m.npcs.push({ id: 'rival5', sheet: 'chars/npc_rival', c: 15, r: 36, dir: 'up' });
+  m.exits.push({ side: 'up', c0: 14, c1: 16, to: { map: 'doi', dc: 0, r: T6_H - 1 } });
+  m.exits.push({ side: 'down', c0: 14, c1: 16, to: null, need: 'stage7',
+                 lockedText: 'พายุยืนขวางทางออกจากอ่าวอยู่\nต้องประลองชนะเขาก่อนจึงจะผ่านไปได้',
+                 soonText: 'ทางไปด่าน 8 เปิดแล้ว!\nแต่ด่าน 8 ยังอยู่ระหว่างสร้าง จะตามมาในเวอร์ชันถัดไป' });
+  return m;
+}
+
+
+
 function buildMaps() {
   const maps = { village: buildVillage(), route1: buildRoute1(), route2: buildRoute2(), town: buildTown(),
-                 ruins: buildRuins() };
+                 ruins: buildRuins(), doi: buildDoi(), bay: buildBay() };
   for (const id of Object.keys(ROOMS)) maps[id] = buildRoom(id);
   return maps;
 }

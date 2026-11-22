@@ -107,6 +107,15 @@ const MOVES = {
   earth_stars:   { name: 'ธรณีพฤษภดารา',   type: 'rock',     power: 90 },
   star_sting:    { name: 'เหล็กในดารา',      type: 'ghost',    power: 70 },
   tail_thunder:  { name: 'หางอัสนีพิจิก',    type: 'electric', power: 90 },
+  // moves of the sea monsters (stage 7)
+  seagrass_wrap: { name: 'สาหร่ายพันตัว',   type: 'leaf',     power: 55 },
+  tide_hug:      { name: 'กอดคลื่นยักษ์',    type: 'water',    power: 80 },
+  sting_shock:   { name: 'หนวดช็อต',        type: 'electric', power: 55 },
+  sea_spark:     { name: 'ระลอกประกายไฟ',   type: 'electric', power: 80 },
+  conch_cry:     { name: 'เสียงสังข์หลอน',   type: 'ghost',    power: 55 },
+  spirit_wave:   { name: 'คลื่นวิญญาณ',      type: 'ghost',    power: 80 },
+  claw_pinch:    { name: 'ก้ามหนีบ',          type: 'normal',   power: 55 },
+  shell_crash:   { name: 'เปลือกหินถล่ม',    type: 'rock',     power: 80 },
   // strongest move of each final evolution
   inferno_horn:   { name: 'เขาเพลิงผลาญ',    type: 'fire',     power: 85 },
   tidal_spiral:   { name: 'เกลียวคลื่นยักษ์', type: 'water',    power: 85 },
@@ -392,6 +401,21 @@ SPECIES.scorpio = { name: 'พิจิกอัสนี', type: 'electric', im
                     hp: 66, atk: 86, def: 68, spd: 86,
                     moves: [[1, 'tackle'], [1, 'spark'], [1, 'star_sting'], [1, 'tail_thunder']] };
 const ZODIAC = ['leo', 'pisces', 'taurus', 'scorpio'];
+
+// ---- The sea monsters of Ao Dao Thale (stage 7). They live only late in the game, so they
+// are as strong as an evolved form and do not evolve.
+SPECIES.dugong = { name: 'พะยูนสาหร่าย', type: 'water', img: 'wild_water_dugong', rarity: 'rare',
+                   hp: 90, atk: 62, def: 78, spd: 42,
+                   moves: [[1, 'tackle'], [1, 'bubble'], [1, 'seagrass_wrap'], [30, 'tide_hug']] };
+SPECIES.jelly = { name: 'แมงกะพรุนอัสนี', type: 'electric', img: 'wild_electric_jelly', rarity: 'common',
+                  hp: 60, atk: 78, def: 56, spd: 74,
+                  moves: [[1, 'tackle'], [1, 'spark'], [1, 'sting_shock'], [30, 'sea_spark']] };
+SPECIES.conch = { name: 'สังข์วิญญาณ', type: 'ghost', img: 'wild_ghost_conch', rarity: 'uncommon',
+                  hp: 66, atk: 72, def: 70, spd: 58,
+                  moves: [[1, 'tackle'], [1, 'candle_wisp'], [1, 'conch_cry'], [30, 'spirit_wave']] };
+SPECIES.hermit = { name: 'ปูเสฉวนศิลา', type: 'rock', img: 'wild_rock_hermit', rarity: 'common',
+                   hp: 70, atk: 76, def: 84, spd: 40,
+                   moves: [[1, 'tackle'], [1, 'pebble'], [1, 'claw_pinch'], [30, 'shell_crash']] };
 const ZODIAC_CHANCE = 0.01, ZODIAC_LEVEL_UP = 2, ZODIAC_FLEE = 0.10;
 
 const STARTERS = ['lamb', 'narwhal', 'pangolin'];
@@ -432,6 +456,18 @@ const ENCOUNTERS = {
   route_j: { levels: [20, 24], table: [['kite2', 12], ['tortoise2', 12], ['moth2', 12], ['snail2', 10], ['buffalo2', 10],
                                        ['durian2', 10], ['krathong2', 8], ['gecko2', 8], ['beetle2', 8],
                                        ['tortoise3', 4], ['moth3', 4], ['beetle3', 4]] },
+  // Doi Mok Yen (stage 6): tea terraces, then the misty pine forest; mostly evolved forms
+  route_k: { levels: [24, 27], table: [['gecko2', 14], ['firefly2', 12], ['kite2', 12], ['bat2', 12], ['durian2', 10],
+                                       ['hyacinth2', 10], ['rooster2', 10], ['snail2', 10], ['beetle2', 8]] },
+  route_l: { levels: [26, 30], table: [['moth2', 12], ['kite2', 12], ['tortoise2', 12], ['gecko2', 10], ['firefly2', 10],
+                                       ['kingfisher2', 10], ['buffalo2', 10], ['krathong2', 8],
+                                       ['beetle3', 5], ['moth3', 5], ['tortoise3', 5]] },
+  // Ao Dao Thale (stage 7): the four sea monsters, with some evolved forms
+  route_m: { levels: [28, 31], table: [['jelly', 16], ['hermit', 16], ['conch', 10], ['dugong', 6], ['crab2', 10],
+                                       ['duck2', 10], ['betta2', 10], ['kingfisher2', 8], ['tortoise2', 6], ['narwhal2', 4]] },
+  route_n: { levels: [30, 33], table: [['hermit', 14], ['jelly', 14], ['conch', 12], ['dugong', 8], ['krathong2', 8],
+                                       ['kite2', 8], ['buffalo2', 8], ['tortoise3', 5], ['moth3', 5], ['beetle3', 4],
+                                       ['narwhal3', 4]] },
 };
 // the rival's team for the rematch at the end of Route 1: [species, level]; "starter2" is
 // the first evolution of the starter he took
@@ -451,6 +487,26 @@ const GYM2 = {
   rower:   { name: 'ฝีพายลุงเรือ',      flag: 'g2b',    team: [['betta', 16], ['crab2', 16], ['duck2', 17]] },
   leader:  { name: 'หัวหน้ายิมวารี',     flag: 'badge2', team: [['betta', 18], ['crab2', 18], ['duck2', 19], ['narwhal3', 20]] },
 };
+
+// The Thunder Gym on Doi Mok Yen (stage 6). Two trainers stand in the gaps of the rows of
+// lantern posts in its hall; beating the leader gives the third badge. team: [species, level]
+const GYM3 = {
+  climber: { name: 'ไกด์ดอยพี่หมอก',     flag: 'g3a',    team: [['gecko2', 27], ['tortoise2', 27], ['beetle2', 28]] },
+  picker:  { name: 'สาวเก็บชาน้องใบชา',  flag: 'g3b',    team: [['firefly2', 28], ['hyacinth2', 28], ['gecko2', 29]] },
+  leader:  { name: 'หัวหน้ายิมอัสนี',     flag: 'badge3', team: [['gecko2', 30], ['firefly2', 31], ['kite2', 31], ['beetle3', 33]] },
+};
+// Trainers on the way up Doi Mok Yen
+const DOI_TRAINERS = {
+  rower: { name: 'ลุงเรือขึ้นดอย',     flag: 'r6t1', team: [['crab2', 25], ['duck2', 25], ['betta2', 26]] },
+  kid:   { name: 'นักดูดาวน้องฟ้า',   flag: 'r6t2', team: [['moth2', 27], ['kite2', 27], ['firefly2', 28]] },
+};
+
+// Stage 7: the trainers on the bay, and the rival's team at the end of the beach
+const BAY_TRAINERS = {
+  fisher:  { name: 'ชาวประมงลุงคลื่น',   flag: 'r7t1', team: [['dugong', 30], ['crab2', 31], ['betta2', 31]] },
+  swimmer: { name: 'นักดำน้ำน้องปะการัง', flag: 'r7t2', team: [['jelly', 31], ['conch', 31], ['duck2', 32]] },
+};
+const RIVAL_BAY = [['kite2', 32], ['betta2', 32], ['hermit', 33], ['rooster2', 33], ['starter3', 35]];
 
 // Trainers along Route 2 (stage 3): each fights once, when spoken to.
 const ROUTE2_TRAINERS = {

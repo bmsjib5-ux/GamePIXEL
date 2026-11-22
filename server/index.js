@@ -54,7 +54,7 @@ const tokenId = (token) => crypto.createHash('sha256').update(String(token)).dig
 
 // ------------------------------------------------------------------ what the leaderboard counts
 // worked out from the save itself: stages cleared, species caught, highest level
-const STAGE_FLAGS = ['rivalBeaten', 'badge1', 'stage3', 'badge2', 'stage5'];
+const STAGE_FLAGS = ['rivalBeaten', 'badge1', 'stage3', 'badge2', 'stage5', 'badge3', 'stage7'];
 function scoreOf(save) {
   const flags = (save && save.flags) || {};
   const mons = [].concat((save && save.party) || [], (save && save.lab) || []);
@@ -62,7 +62,7 @@ function scoreOf(save) {
     stage: STAGE_FLAGS.filter((f) => flags[f]).length,
     caught: new Set(Array.isArray(save && save.caught) ? save.caught : []).size,
     level: mons.reduce((n, m) => Math.max(n, Number(m && m.level) || 0), 0),
-    badges: (flags.badge1 ? 1 : 0) + (flags.badge2 ? 1 : 0),
+    badges: (flags.badge1 ? 1 : 0) + (flags.badge2 ? 1 : 0) + (flags.badge3 ? 1 : 0),
   };
 }
 
