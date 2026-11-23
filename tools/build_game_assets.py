@@ -41,7 +41,7 @@ for kind in ("objects", "buildings", "furniture"):
 for who in ("hero", "npc_researcher", "npc_rival", "npc_shopkeeper", "npc_healer",
             "npc_gym_leader", "npc_gym_hiker", "npc_gym_kid",
             "npc_gym2_leader", "npc_gym2_rower", "npc_gym2_swimmer",
-            "npc_gym3_leader", "npc_gym3_picker", "npc_gym3_climber"):
+            "npc_gym3_leader", "npc_gym3_picker", "npc_gym3_climber", "npc_loykrathong"):
     if not os.path.isdir(os.path.join(SRC, "sprites", who)):
         continue
     copy(os.path.join("sprites", who, f"{who}_walk_32x48.png"), os.path.join("chars", f"{who}.png"))

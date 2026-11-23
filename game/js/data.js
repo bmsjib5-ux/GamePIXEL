@@ -547,4 +547,26 @@ const GYM_STONES = 3;      // stones each gym leader gives
 // team's levels x GOLD_TRAINER.
 const GOLD_START = 300, GOLD_WILD = 6, GOLD_TRAINER = 12.5;      // halved from 12 / 25
 const ENCOUNTER_CHANCE = 0.13;
+
+// ---- Seasonal event: the Loy Krathong festival (full moon of the 12th Thai month,
+// 24 November 2026). It runs for about two weeks around the night itself; "?event=loykrathong"
+// in the address turns it on at any time (for testing), "?event=off" turns it off.
+const LOY_KRATHONG = {
+  name: 'เทศกาลลอยกระทง', flag: 'lk26',
+  start: new Date(2026, 10, 17), end: new Date(2026, 11, 1),     // 17 Nov - 30 Nov 2026 (local time)
+  ghosts: 3,                     // ghost krathongs to beat or catch for the quest
+  ghostChance: 0.2,              // share of wild encounters that are ghost krathongs during the event
+  gifts: [['capsule', 5, 'แคปซูล 5 ลูก'], ['potion', 5, 'ยา 5 ขวด'], ['capsule_gold', 2, 'แคปซูลทอง 2 ลูก'],
+          ['potion_plus', 2, 'ยาชั้นดี 2 ขวด'], ['gold', 500, 'เหรียญทอง 500 ทอง']],
+  wishes: [['ขอให้โชคดีมีชัย', 'capsule_gold', 3, 'แคปซูลทอง 3 ลูก'],
+           ['ขอให้แข็งแรงทั้งทีม', 'potion_plus', 3, 'ยาชั้นดี 3 ขวด'],
+           ['ขอให้ร่ำรวยเงินทอง', 'gold', 1000, 'เหรียญทอง 1000 ทอง']],
+};
+function loyKrathongOn() {
+  const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('event') : null;
+  if (q === 'loykrathong') return true;
+  if (q === 'off') return false;
+  const now = new Date();
+  return now >= LOY_KRATHONG.start && now < LOY_KRATHONG.end;
+}
 const PARTY_MAX = 6;

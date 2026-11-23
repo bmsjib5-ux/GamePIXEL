@@ -309,6 +309,8 @@ function buildVillage() {
 
   m.things.sort((a, b) => a.sortY - b.sortY);
   m.npcs.push({ id: 'researcher', sheet: 'chars/npc_researcher', c: 16, r: 10, dir: 'down' });
+  // during the Loy Krathong festival, grandma Bua Kham waits by the pond with krathongs
+  if (loyKrathongOn()) m.npcs.push({ id: 'lk_auntie', sheet: 'chars/npc_loykrathong', c: 9, r: 20, dir: 'down' });
   // the rival blocks the way south until he is beaten, then waits on Route 1
   m.npcs.push({ id: 'rival', sheet: 'chars/npc_rival', c: 15, r: 23, dir: 'up', hideIf: 'rivalBeaten' });
   // walking off the bottom of the road leads to Route 1 (stage 2)

@@ -76,7 +76,7 @@
       'chars/npc_shopkeeper', 'chars/npc_healer', 'chars/rival_large',
       'chars/npc_gym_leader', 'chars/npc_gym_hiker', 'chars/npc_gym_kid',
       'chars/npc_gym2_leader', 'chars/npc_gym2_rower', 'chars/npc_gym2_swimmer',
-      'chars/npc_gym3_leader', 'chars/npc_gym3_picker', 'chars/npc_gym3_climber'];
+      'chars/npc_gym3_leader', 'chars/npc_gym3_picker', 'chars/npc_gym3_climber', 'chars/npc_loykrathong'];
     for (const n of Object.keys(SPRITE_META.objects)) names.push('objects/' + n);
     for (const n of Object.keys(SPRITE_META.buildings)) names.push('buildings/' + n);
     for (const n of Object.keys(SPRITE_META.furniture)) names.push('furniture/' + n);
@@ -610,7 +610,8 @@
     const n = npcAt(c, r);
     if (n) { n.dir = OPPOSITE[pl.dir]; run(SCENES[n.id]); return; }
     const id = MAP.interact.get(cellKey(c, r));
-    if (id && SCENES[id]) run(SCENES[id]);
+    if (id && SCENES[id]) { run(SCENES[id]); return; }
+    if (LK.on && !MAP.indoor && isWater(c, r)) run(SCENES.lk_float);
   }
 
   function playerPixel() {
@@ -641,6 +642,64 @@
       Math.round(px) - camX, Math.round(py) + TS - 48 - camY, 32, 48) });
     list.sort((a, c) => a.sortY - c.sortY);
     for (const e of list) e.draw();
+    if (LK.on && !MAP.indoor) festivalWorld(camX, camY);
+  }
+
+  // ---- the Loy Krathong look, drawn on the low-resolution picture
+  function drawKrathong(px, py, flick) {
+    b.save(); b.translate(Math.round(px), Math.round(py)); b.scale(2, 2);      // drawn at twice the pixel size
+    const x = 0, y = 0;
+    b.fillStyle = 'rgba(255,190,80,0.22)'; b.beginPath(); b.arc(x, y - 6, 9, 0, Math.PI * 2); b.fill();
+    b.fillStyle = 'rgba(255,210,120,0.35)'; b.fillRect(x - 4, y + 3, 8, 1);            // its light on the water
+    b.fillStyle = '#245f28'; b.fillRect(x - 6, y, 12, 3);
+    b.fillStyle = '#4fae4a'; b.fillRect(x - 5, y - 2, 10, 2);
+    b.fillStyle = '#6cc866'; b.fillRect(x - 6, y - 4, 2, 2); b.fillRect(x - 2, y - 5, 2, 3);
+    b.fillRect(x + 1, y - 5, 2, 3); b.fillRect(x + 4, y - 4, 2, 2);
+    b.fillStyle = '#ff8fb0'; b.fillRect(x - 4, y - 3, 2, 2);
+    b.fillStyle = '#ffd34a'; b.fillRect(x + 2, y - 3, 2, 2);
+    b.fillStyle = '#fff4d6'; b.fillRect(x - 1, y - 8, 2, 5);
+    b.fillStyle = flick ? '#ffe27a' : '#ffb02e'; b.fillRect(x - 1, y - 11, 2, 3);
+    b.restore();
+  }
+  function drawLantern(x, y, a) {
+    x = Math.round(x); y = Math.round(y);
+    b.globalAlpha = a;
+    b.fillStyle = 'rgba(255,170,70,0.25)'; b.beginPath(); b.arc(x, y, 8, 0, Math.PI * 2); b.fill();
+    b.fillStyle = '#f39a3c'; b.fillRect(x - 3, y - 4, 6, 8);
+    b.fillStyle = '#d9772a'; b.fillRect(x - 3, y - 4, 6, 1); b.fillRect(x - 2, y + 4, 4, 1);
+    b.fillStyle = '#ffe9a0'; b.fillRect(x - 1, y, 2, 3);
+    b.globalAlpha = 1;
+  }
+  function skyLanterns(w, h, n) {
+    for (let i = 0; i < n; i++) {
+      const span = h + 40, y = h + 20 - ((clock * (9 + (i % 3) * 3) + i * 53) % span);
+      const x = (i * 97 + 23) % w + Math.sin(clock * 0.8 + i) * 6;
+      drawLantern(x, y, 0.55 + 0.4 * Math.sin(clock * 3 + i * 1.7) ** 2);
+    }
+  }
+  const waterCache = new Map();
+  function festivalWorld(camX, camY) {
+    if (!waterCache.has(MAP.id)) {            // a few water cells carry a floating krathong
+      const cells = [];
+      for (let r = 0; r < MAP.h; r++) for (let c = 0; c < MAP.w; c++) {
+        const g = MAP.ground[r][c];          // open water only, not the shore tiles
+        const open = g === 'pond_c' || g === 'water' || g === 'deep_water' || (g.startsWith('river_') && !g.startsWith('river_bridge'));
+        if (open && (c * 31 + r * 17 + c * r) % 5 === 0) cells.push([c, r]);
+      }
+      waterCache.set(MAP.id, cells);
+    }
+    waterCache.get(MAP.id).forEach(([c, r], i) => {
+      const x = c * TS + 16 + Math.sin(clock * 0.5 + i) * 7 - camX, y = r * TS + 20 + Math.sin(clock * 1.3 + i * 2) * 1.5 - camY;
+      if (x > -20 && x < VW + 20 && y > -20 && y < VH + 20) drawKrathong(x, y, Math.sin(clock * 9 + i * 3) > 0);
+    });
+    if (ui.lkFloat) {                          // the player's own krathong drifting away
+      const f = ui.lkFloat;
+      b.globalAlpha = 1 - Math.max(0, f.t - 0.7) / 0.3;
+      drawKrathong(f.c * TS + 16 + f.dx * f.t * 48 - camX, f.r * TS + 20 + f.dy * f.t * 48 - camY, Math.sin(clock * 9) > 0);
+      b.globalAlpha = 1;
+    }
+    b.fillStyle = 'rgba(40,24,90,0.16)'; b.fillRect(0, 0, VW, VH);       // a festival evening
+    skyLanterns(VW, VH, 9);
   }
 
   // ------------------------------------------------------------------ scenes
@@ -653,7 +712,80 @@
     return pick === 0;
   }
 
+  // ---- the Loy Krathong festival (see LOY_KRATHONG in data.js)
+  const LK = {
+    on: loyKrathongOn(),
+    f: (k) => G.flags[LOY_KRATHONG.flag + '_' + k],
+    set: (k, v) => { G.flags[LOY_KRATHONG.flag + '_' + k] = v; },
+    today: () => new Date().toLocaleDateString('sv'),
+    // the step of the festival quest still to do, for the objective guide
+    step() {
+      if (!LK.on || !G) return null;
+      if (!LK.f('kit')) return 'ไปหาป้าบัวคำที่ริมสระน้ำในหมู่บ้านต้นกล้า';
+      if (!LK.f('float')) return 'นำกระทงไปลอยที่สระน้ำหรือแม่น้ำ (หันหน้าเข้าหาน้ำแล้วกดตกลง)';
+      const n = LK.f('ghost') || 0;
+      if (n < LOY_KRATHONG.ghosts) return 'ปราบหรือจับกระทงผีในพงหญ้า ' + n + '/' + LOY_KRATHONG.ghosts;
+      if (!LK.f('done')) return 'กลับไปรับรางวัลจากป้าบัวคำที่หมู่บ้านต้นกล้า';
+      return LK.f('day') !== LK.today() ? 'รับของขวัญประจำวันจากป้าบัวคำได้วันละครั้ง' : null;
+    },
+  };
+  function isWater(c, r) {
+    const g = MAP.ground[r] && MAP.ground[r][c];
+    return !!g && (g.startsWith('pond_') || g === 'water' || g === 'deep_water' || (g.startsWith('river_') && !g.startsWith('river_bridge')));
+  }
+  function giveItem(id, n) { if (id === 'gold') G.gold += n; else G.bag[id] = (G.bag[id] || 0) + n; }
+
   const SCENES = {
+    async lk_auntie() {
+      if (!LK.f('kit')) {
+        await say('สุขสันต์วันลอยกระทงจ้ะ {ชื่อ}! ป้าชื่อบัวคำ\nปีนี้ป้าทำกระทงใบตองไว้เยอะเลย');
+        await say('แต่คืนเดือนเพ็ญปีนี้ มีกระทงผีลอยขึ้นมาจากน้ำเต็มพงหญ้าไปหมด\nช่วยป้าหน่อยได้ไหมจ๊ะ?');
+        LK.set('kit', true); AUDIO.sfx('fanfare');
+        await say('ได้รับกระทงใบตองจากป้าบัวคำ!');
+        await say('เอากระทงไปลอยที่สระน้ำหรือแม่น้ำก่อนนะ แล้วอธิษฐานขอพร\nจากนั้นช่วยปราบกระทงผีในพงหญ้า ' + LOY_KRATHONG.ghosts + ' ตัว แล้วกลับมาหาป้า');
+        save();
+      } else if ((LK.f('ghost') || 0) >= LOY_KRATHONG.ghosts && !LK.f('done')) {
+        await say('โอ้โห ปราบกระทงผีได้ครบแล้ว! เก่งมากจ้ะ {ชื่อ}\nนี่ของขวัญจากป้า รับไปเลย');
+        LK.set('done', true); AUDIO.sfx('fanfare');
+        G.bag.capsule_gold += 5; G.bag.potion_plus += 5; G.gold += 3000;
+        const gift = { sp: 'krathong', level: 18, exp: 18 * 18 * 18, hp: 0, nick: 'กระทงเพ็ญ',
+                       moves: SPECIES.krathong.moves.filter(([l]) => l <= 18).map((x) => x[1]).slice(-4) };
+        const where = receiveMon(gift);
+        await say('ได้รับแคปซูลทอง 5 ลูก ยาชั้นดี 5 ขวด และเหรียญทอง 3000 ทอง!');
+        await say('และได้รับกระทงผี "กระทงเพ็ญ" Lv.18 เข้า' + where + '!\nมันเชื่องแล้ว ไม่หลอกใครอีกแล้วจ้ะ');
+        save();
+      } else if (!LK.f('float')) {
+        await say('ยังไม่ได้ลอยกระทงเลยนี่จ๊ะ\nไปที่สระน้ำข้าง ๆ นี่ หันหน้าเข้าหาน้ำแล้วกดตกลงนะ');
+      } else if (!LK.f('done')) {
+        await say('กระทงผียังเหลืออีก ' + (LOY_KRATHONG.ghosts - (LK.f('ghost') || 0)) + ' ตัว\nช่วงเทศกาลจะเจอพวกมันในพงหญ้าได้บ่อยขึ้นนะ');
+      }
+      // a small gift every day of the festival
+      if (LK.f('day') !== LK.today()) {
+        const [id, n, label] = LOY_KRATHONG.gifts[rand(LOY_KRATHONG.gifts.length)];
+        giveItem(id, n); LK.set('day', LK.today()); AUDIO.sfx('confirm');
+        await say('ของขวัญเทศกาลประจำวันนี้จ้ะ\nได้รับ' + label + '!  (พรุ่งนี้มารับใหม่ได้อีกนะ)');
+        save();
+      } else if (LK.f('done')) {
+        await say('สุขสันต์วันลอยกระทงจ้ะ! พรุ่งนี้แวะมารับของขวัญใหม่นะ');
+      }
+    },
+    async lk_float() {
+      if (!LK.f('kit')) { await say('แสงเทียนจากกระทงนับร้อยลอยระยิบระยับอยู่บนน้ำ\nไปขอกระทงจากป้าบัวคำที่ริมสระในหมู่บ้านต้นกล้าสิ'); return; }
+      if (LK.f('float')) { await say('กระทงของคุณลอยไปไกลแล้ว แสงเทียนยังส่องประกายอยู่ลิบ ๆ'); return; }
+      if (!(await yesNo('จะลอยกระทงตรงนี้เลยไหม?'))) return;
+      const i = await choose(LOY_KRATHONG.wishes.map((w) => w[0]), { w: 220, title: 'อธิษฐานขอพรว่า...' });
+      const [, id, n, label] = LOY_KRATHONG.wishes[Math.max(0, i)];
+      const [dx, dy] = DIRS[pl.dir];
+      ui.lkFloat = { c: pl.c + dx, r: pl.r + dy, dx, dy, t: 0 };
+      AUDIO.sfx('confirm');
+      await tween(2200, (t) => { ui.lkFloat.t = t; });
+      LK.set('float', true);
+      giveItem(id, n);
+      await say('กระทงลอยไปตามสายน้ำ พร้อมคำอธิษฐานของคุณ...\nได้รับ' + label + '!');
+      await say('ภารกิจต่อไป : ปราบหรือจับกระทงผีในพงหญ้า ' + LOY_KRATHONG.ghosts + ' ตัว');
+      ui.lkFloat = null;
+      save();
+    },
     async researcher() {
       if (!G.flags.starter) {
         await say('ยินดีต้อนรับ {ชื่อ}! มาตรงเวลาเลยนะ\nฉันคือศาสตราจารย์สน ศึกษามอนสเตอร์อยู่ที่ศูนย์วิจัยโดมกระจกหลังนี้');
@@ -1728,6 +1860,19 @@
       await battle([makeMon(ZODIAC[rand(ZODIAC.length)], e.levels[1] + ZODIAC_LEVEL_UP)], null, { zodiac: true });
       return;
     }
+    if (LK.on && Math.random() < LOY_KRATHONG.ghostChance) {
+      const e = ENCOUNTERS[area], lv = e.levels[0] + rand(e.levels[1] - e.levels[0] + 1);
+      const foe = makeMon(lv >= 20 ? 'krathong2' : 'krathong', lv);
+      const result = await battle([foe], null);
+      if ((result === 'win' || result === 'caught') && LK.f('kit') && !LK.f('done')) {
+        const n = Math.min(LOY_KRATHONG.ghosts, (LK.f('ghost') || 0) + 1);
+        LK.set('ghost', n);
+        await say('เทศกาลลอยกระทง : ปราบกระทงผีแล้ว ' + n + '/' + LOY_KRATHONG.ghosts
+          + (n >= LOY_KRATHONG.ghosts ? '\nกลับไปรับรางวัลจากป้าบัวคำที่หมู่บ้านต้นกล้าได้เลย!' : ''));
+        save();
+      }
+      return;
+    }
     await battle([pickWild(area)], null);
   }
   async function legendEncounter() {
@@ -2570,6 +2715,7 @@
     b.drawImage(IMG['monsters/starter_fire_lamb'], 62, 150, 128, 128);
     b.drawImage(IMG['monsters/starter_water_narwhal'], 176, 134, 128, 128);
     b.drawImage(IMG['monsters/starter_leaf_pangolin'], 292, 150, 128, 128);
+    if (LK.on) skyLanterns(VW, BAND, 12);
   }
   function drawTitleText() {
     ctx.lineJoin = 'round';
@@ -2579,6 +2725,11 @@
     setFont(16, true);
     ctx.lineWidth = 4; ctx.strokeText('หมู่บ้านต้นกล้า', 240, 92);
     ctx.fillStyle = '#ffffff'; ctx.fillText('หมู่บ้านต้นกล้า', 240, 92);
+    if (LK.on) {
+      setFont(14, true); ctx.lineWidth = 4;
+      ctx.strokeText('~ ' + LOY_KRATHONG.name + ' ~', 240, 118);
+      ctx.fillStyle = '#ffcf5a'; ctx.fillText('~ ' + LOY_KRATHONG.name + ' ~', 240, 118);
+    }
   }
 
   function drawUI() {
@@ -2616,9 +2767,11 @@
     if (mode === 'world' && G && !G.flags.hideGoal && !ui.banner && !ui.msg && !ui.menu && !ui.card && !ui.chart) {
       const q = questNow();
       if (q) {
-        if (goalUi.last !== null && goalUi.last !== q.text) { goalUi.glow = 3; AUDIO.sfx('levelup'); }
-        goalUi.last = q.text;
-        const line = '◆ เป้าหมาย : ' + q.text + (q.hint ? '  (' + q.hint + ')' : '');
+        const key = q.text + '|' + (LK.step() || '');
+        if (goalUi.last !== null && goalUi.last !== key) { goalUi.glow = 3; AUDIO.sfx('levelup'); }
+        goalUi.last = key;
+        const ev = LK.step();
+        const line = '◆ เป้าหมาย : ' + q.text + (q.hint ? '  (' + q.hint + ')' : '') + (ev ? '\n◇ ลอยกระทง : ' + ev : '');
         const lines = wrap(line, 400, 11);
         setFont(11, true);                // measured bold: the widest it is ever drawn
         const w = Math.min(460, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 30), h = 10 + lines.length * 15;

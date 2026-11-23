@@ -178,7 +178,7 @@ def walk_sheet(src, prefix, folder, colors=32):
 sheet = walk_sheet("hero_walk_sheet.png", "hero", "hero")
 npc_walks = []
 for who in ["researcher", "rival", "shopkeeper", "healer", "gym_leader", "gym_hiker", "gym_kid",
-            "gym2_leader", "gym2_rower", "gym2_swimmer", "gym3_leader", "gym3_picker", "gym3_climber"]:
+            "gym2_leader", "gym2_rower", "gym2_swimmer", "gym3_leader", "gym3_picker", "gym3_climber", "loykrathong"]:
     if os.path.exists(os.path.join(SRC, f"npc_{who}_walk_sheet.png")):
         npc_walks.append(walk_sheet(f"npc_{who}_walk_sheet.png", f"npc_{who}", f"npc_{who}"))
 
