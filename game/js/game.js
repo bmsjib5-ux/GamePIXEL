@@ -2099,7 +2099,10 @@
     // After the foe falls. Returns true when the battle is won.
     async function afterFoeFaint() {
       await faint('foe');
-      if (!opts.pvp) await gainExp(bt.me, Math.floor(50 * bt.foe.level / 5 * (trainer ? 1.5 : 1)));
+      // during the Loy Krathong festival, beating a wild ghost krathong gives double experience
+      const lkBonus = LK.on && !trainer && !opts.pvp && /^krathong/.test(bt.foe.sp);
+      if (lkBonus) { AUDIO.sfx('levelup'); await say('เทศกาลลอยกระทง : ปราบกระทงผี ได้รับค่าประสบการณ์ x2!'); }
+      if (!opts.pvp) await gainExp(bt.me, Math.floor(50 * bt.foe.level / 5 * (trainer ? 1.5 : 1)) * (lkBonus ? 2 : 1));
       const next = bt.foes.find((m) => m.hp > 0);
       if (!next) return true;
       bt.foe = next; bt.hp.foe = next.hp;
