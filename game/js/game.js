@@ -2614,6 +2614,21 @@
         const a = i * 0.9 + t * 7, r = 62 * (1 - t) + 10 + rnd(i, 1) * 10;
         dot(fx.x + Math.cos(a) * r, fx.y + Math.sin(a) * r * 0.7, i % 3 ? 10 : 6, pick(['#c9a8ff', '#8560b8', '#5b3f8a', '#f0e6ff'], i));
       }
+    } else if (fx.type === 'wind') {                // gusts sweeping across in curls, with leaves of light
+      for (let k = 0; k < Math.round(3 * n); k++) {
+        const s0 = k * 0.12, life = (t - s0) / 0.6;
+        if (life < 0 || life > 1) continue;
+        const y0 = fx.y - 40 + k * 26;
+        for (let j = 0; j < 16; j++) {
+          const p = j / 15, x = fx.x - 90 + (life * 1.4 - 0.2 + p * 0.5) * 140;
+          const curl = p > 0.75 ? Math.sin((p - 0.75) * 4 * Math.PI) * 10 : 0;
+          dot(x, y0 + Math.sin(p * 5 + life * 6) * 6 - curl, j % 4 ? 6 : 8, pick(['#ffffff', '#c3eef4', '#6fcad6'], j + k));
+        }
+      }
+      for (let i = 0; i < 12 * n; i++) {
+        const life = (t * 1.3 + rnd(i, 1)) % 1;
+        dot(fx.x - 70 + life * 140, fx.y - 50 + rnd(i, 2) * 90 + Math.sin(life * 10 + i) * 8, 4, pick(['#e8fbff', '#8fd8e3'], i));
+      }
     } else if (fx.type === 'evolve') {              // sparkles rising all around
       for (let i = 0; i < 34; i++) {
         const life = (t + rnd(i, 1)) % 1;
@@ -2796,9 +2811,10 @@
     box(24, 10, 432, 300);
     text('ตารางแพ้ธาตุ', 40, 33, 14, '#2b2420', 'left', true);
     text('ท่าที่ได้เปรียบแรงขึ้น 1.5 เท่า  ท่าที่เสียเปรียบเหลือ 2 ใน 3', 444, 33, 10, '#5a5048', 'right');
-    Object.keys(TYPES).filter((t) => !TYPES[t].hidden).forEach((type, i) => {
-      const y = 62 + i * 34, links = typeLinks(type);
-      if (i % 2 === 0) { ctx.fillStyle = '#f1e9cf'; roundRect(32, y - 19, 416, 30, 4); ctx.fill(); }
+    const shown = Object.keys(TYPES).filter((t) => !TYPES[t].hidden), rowH = Math.min(34, Math.floor(210 / (shown.length - 1)));
+    shown.forEach((type, i) => {
+      const y = 62 + i * rowH, links = typeLinks(type);
+      if (i % 2 === 0) { ctx.fillStyle = '#f1e9cf'; roundRect(32, y - 19, 416, rowH - 4, 4); ctx.fill(); }
       badge(type, 42, y);
       text('ชนะทาง', 96, y + 1, 11, '#2f8a3a', 'left', true);
       badges(links.beats, 142, y);

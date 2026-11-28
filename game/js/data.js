@@ -9,6 +9,7 @@ const TYPES = {
   electric: { name: 'ไฟฟ้า', color: '#c99a10' },
   rock:     { name: 'หิน',    color: '#8a745f' },
   ghost:    { name: 'ผี',     color: '#8560b8' },
+  wind:     { name: 'ลม',     color: '#3fa9b8' },
   // the legendary monster's own type: outside the match-up table, so it is left out of it
   legend:   { name: 'ตำนาน', color: '#c08a12', hidden: true },
 };
@@ -17,16 +18,18 @@ const TYPES = {
 const STRONG = 1.5, WEAK = 0.67;
 // Every type is weak to at least one other:
 //   fire <- water, rock      water <- leaf, electric    leaf <- fire
-//   electric <- rock         rock <- water, leaf        ghost <- ghost, fire
-//   normal <- rock
+//   electric <- rock         rock <- water, leaf        ghost <- ghost, fire, wind
+//   normal <- rock           wind <- electric, rock
+// Wind blows leaves and spirits away, but stone and lightning stand up to it.
 const TYPE_CHART = {
   fire:     { leaf: STRONG, ghost: STRONG, water: WEAK, rock: WEAK, fire: WEAK },
   water:    { fire: STRONG, rock: STRONG, leaf: WEAK, water: WEAK },
-  leaf:     { water: STRONG, rock: STRONG, fire: WEAK, leaf: WEAK },
-  electric: { water: STRONG, leaf: WEAK, rock: WEAK, electric: WEAK },
-  rock:     { fire: STRONG, electric: STRONG, normal: STRONG, leaf: WEAK, rock: WEAK },
+  leaf:     { water: STRONG, rock: STRONG, fire: WEAK, leaf: WEAK, wind: WEAK },
+  electric: { water: STRONG, wind: STRONG, leaf: WEAK, rock: WEAK, electric: WEAK },
+  rock:     { fire: STRONG, electric: STRONG, normal: STRONG, wind: STRONG, leaf: WEAK, rock: WEAK },
   ghost:    { ghost: STRONG, normal: WEAK },
   normal:   { rock: WEAK, ghost: WEAK },
+  wind:     { leaf: STRONG, ghost: STRONG, rock: WEAK, electric: WEAK, wind: WEAK },
 };
 
 const MAX_MOVES = 4;      // a monster remembers at most this many moves
@@ -116,6 +119,21 @@ const MOVES = {
   spirit_wave:   { name: 'คลื่นวิญญาณ',      type: 'ghost',    power: 80 },
   claw_pinch:    { name: 'ก้ามหนีบ',          type: 'normal',   power: 55 },
   shell_crash:   { name: 'เปลือกหินถล่ม',    type: 'rock',     power: 80 },
+  // moves of the wind monsters
+  gust:          { name: 'ลมกรรโชก',        type: 'wind',     power: 45 },
+  cloud_puff:    { name: 'ปุยเมฆพัด',        type: 'wind',     power: 45 },
+  chime_ring:    { name: 'เสียงกระดิ่งลม',   type: 'wind',     power: 45 },
+  swift_dive:    { name: 'โฉบลมเย็น',        type: 'wind',     power: 65 },
+  glide_slash:   { name: 'ร่อนตัดลม',        type: 'wind',     power: 65 },
+  cloud_spin:    { name: 'เมฆหมุนวน',        type: 'wind',     power: 65 },
+  chime_wave:    { name: 'คลื่นเสียงวายุ',    type: 'wind',     power: 65 },
+  pinwheel_spin: { name: 'กังหันหมุนติ้ว',    type: 'wind',     power: 65 },
+  // strongest move of each evolved wind monster
+  storm_dive:    { name: 'ดิ่งพายุ',          type: 'wind',     power: 80 },
+  sky_glide:     { name: 'เหินฟ้าถล่ม',       type: 'wind',     power: 80 },
+  cyclone:       { name: 'พายุไซโคลน',       type: 'wind',     power: 80 },
+  temple_gale:   { name: 'ระฆังพายุ',         type: 'wind',     power: 80 },
+  typhoon:       { name: 'พายุไต้ฝุ่น',        type: 'wind',     power: 85 },
   // strongest move of each final evolution
   inferno_horn:   { name: 'เขาเพลิงผลาญ',    type: 'fire',     power: 85 },
   tidal_spiral:   { name: 'เกลียวคลื่นยักษ์', type: 'water',    power: 85 },
@@ -334,6 +352,46 @@ const SPECIES = {
               hp: 65, atk: 78, def: 65, spd: 90,
               moves: [[1, 'tackle'], [1, 'lantern_glow'], [4, 'wing_slap'], [8, 'wing_haunt'], [11, 'dew_dust'], [14, 'moon_lantern']] },
 };
+// ---- The wind monsters (ธาตุลม). Each evolves once (see FAMILY for the terms). Their art is
+// drawn by tools/draw_wind_monsters.py.
+Object.assign(SPECIES, {
+  swallow:   { name: 'นางแอ่นลมเย็น', type: 'wind', img: 'wild_wind_swallow',
+               hp: 40, atk: 52, def: 38, spd: 70,
+               moves: [[1, 'peck'], [1, 'gust'], [4, 'wing_slap'], [8, 'swift_dive']],
+               evolve: { level: 20, to: 'swallow2' } },
+  squirrel:  { name: 'กระรอกร่อนลม', type: 'wind', img: 'wild_wind_squirrel',
+               hp: 46, atk: 50, def: 46, spd: 58,
+               moves: [[1, 'tackle'], [1, 'gust'], [4, 'leaf_toss'], [8, 'glide_slash']],
+               evolve: { level: 20, to: 'squirrel2' } },
+  cloud:     { name: 'ปุยเมฆ', type: 'wind', img: 'wild_wind_cloud',
+               hp: 58, atk: 44, def: 56, spd: 40,
+               moves: [[1, 'tackle'], [1, 'cloud_puff'], [8, 'cloud_spin'], [11, 'dew_dust']],
+               evolve: { level: 30, to: 'cloud2' } },
+  chime:     { name: 'กระดิ่งลม', type: 'wind', img: 'wild_wind_chime',
+               hp: 44, atk: 56, def: 50, spd: 48,
+               moves: [[1, 'tackle'], [1, 'chime_ring'], [8, 'chime_wave'], [11, 'lantern_glow']],
+               evolve: { level: 30, to: 'chime2' } },
+  fox:       { name: 'จิ้งจอกกังหัน', type: 'wind', img: 'wild_wind_fox',
+               hp: 46, atk: 58, def: 44, spd: 64,
+               moves: [[1, 'tackle'], [1, 'gust'], [4, 'horn_charge'], [8, 'pinwheel_spin'], [11, 'rock_roll']],
+               evolve: { level: 20, to: 'fox2' } },
+  swallow2:  { name: 'นางแอ่นพายุ', type: 'wind', img: 'wild_wind_swallow_evo1',
+               hp: 54, atk: 70, def: 51, spd: 94,
+               moves: [[1, 'peck'], [1, 'gust'], [4, 'wing_slap'], [8, 'swift_dive'], [12, 'storm_dive']] },
+  squirrel2: { name: 'กระรอกเหินฟ้า', type: 'wind', img: 'wild_wind_squirrel_evo1',
+               hp: 62, atk: 67, def: 62, spd: 78,
+               moves: [[1, 'tackle'], [1, 'gust'], [4, 'leaf_toss'], [8, 'glide_slash'], [12, 'sky_glide']] },
+  cloud2:    { name: 'เมฆาวายุ', type: 'wind', img: 'wild_wind_cloud_evo1',
+               hp: 78, atk: 59, def: 76, spd: 54,
+               moves: [[1, 'tackle'], [1, 'cloud_puff'], [8, 'cloud_spin'], [11, 'dew_dust'], [12, 'cyclone']] },
+  chime2:    { name: 'ระฆังวายุ', type: 'wind', img: 'wild_wind_chime_evo1',
+               hp: 60, atk: 76, def: 68, spd: 64,
+               moves: [[1, 'tackle'], [1, 'chime_ring'], [8, 'chime_wave'], [11, 'lantern_glow'], [12, 'temple_gale']] },
+  fox2:      { name: 'จิ้งจอกพายุหมุน', type: 'wind', img: 'wild_wind_fox_evo1',
+               hp: 62, atk: 80, def: 60, spd: 88,
+               moves: [[1, 'tackle'], [1, 'gust'], [4, 'horn_charge'], [8, 'pinwheel_spin'], [11, 'rock_roll'], [12, 'typhoon']] },
+});
+
 // The legendary monster. It is met exactly once, in the village's tall grass (stage 1),
 // as the LEGEND_AFTER-th wild encounter there. Its level is shown as infinite: it cannot be
 // hurt or caught, and it leaves by itself. Meeting it again is left for a later update.
@@ -369,6 +427,9 @@ const FAMILY = {
   betta: ['common', [20]], hyacinth: ['common', [20]],
   firefly: ['uncommon', [30]], kingfisher: ['uncommon', [30]],
   krathong: ['rare', [20, 'stone_water']],
+  swallow: ['common', [20]], squirrel: ['common', [20]],
+  cloud: ['uncommon', [30]], chime: ['uncommon', [30]],
+  fox: ['rare', [20, 'stone_rock']],
 };
 for (const [first, [rarity, ...steps]] of Object.entries(FAMILY)) {
   let sp = first;
@@ -436,20 +497,22 @@ const ENCOUNTERS = {
                                       ['beetle2', 8], ['tortoise2', 6], ['moth2', 6]] },
   // Route 2 (stage 3): stronger monsters, and some of them have already evolved
   route_d: { levels: [10, 12], table: [['rooster', 20], ['bat', 18], ['gecko', 18], ['kite', 14],
-                                       ['beetle2', 16], ['moth2', 14]] },
+                                       ['beetle2', 16], ['moth2', 14], ['swallow', 14], ['squirrel', 12]] },
   route_e: { levels: [11, 13], table: [['duck', 22], ['crab', 20], ['frog', 18], ['tortoise2', 14],
-                                       ['duck2', 9], ['crab2', 9], ['narwhal2', 8]] },
+                                       ['duck2', 9], ['crab2', 9], ['narwhal2', 8], ['swallow', 10]] },
   route_f: { levels: [12, 14], table: [['buffalo', 16], ['snail', 14], ['durian', 16], ['kite2', 10], ['gecko2', 10],
-                                       ['rooster2', 10], ['bat2', 8], ['lamb2', 8], ['pangolin2', 8]] },
+                                       ['rooster2', 10], ['bat2', 8], ['lamb2', 8], ['pangolin2', 8],
+                                       ['squirrel', 10], ['cloud', 8], ['fox', 8]] },
   // Bang Bua town (stage 4)
   // the five floating-market monsters make up about half of what lives here
   route_g: { levels: [14, 16], table: [['betta', 16], ['hyacinth', 16], ['firefly', 14], ['kingfisher', 12],
                                        ['krathong', 8], ['duck2', 8], ['crab2', 8], ['frog2', 6], ['bat2', 6],
-                                       ['gecko2', 6], ['kite2', 6], ['moth2', 6], ['beetle2', 6]] },
+                                       ['gecko2', 6], ['kite2', 6], ['moth2', 6], ['beetle2', 6], ['chime', 10]] },
   route_h: { levels: [16, 18], table: [['krathong', 14], ['kingfisher', 12], ['firefly', 12], ['betta', 8],
                                        ['hyacinth', 8], ['buffalo2', 10], ['durian2', 10], ['snail2', 8],
                                        ['rooster2', 8], ['tortoise2', 8], ['narwhal2', 6], ['lamb2', 5],
-                                       ['pangolin2', 5], ['beetle3', 3], ['moth3', 3]] },
+                                       ['pangolin2', 5], ['beetle3', 3], ['moth3', 3], ['cloud', 8], ['chime', 8],
+                                       ['fox', 8]] },
   // the ancient city ruins (stage 5): ghosts and stone, and many evolved forms
   route_i: { levels: [18, 21], table: [['moth2', 14], ['tortoise2', 14], ['snail', 12], ['gecko', 12], ['krathong', 12],
                                        ['kite', 12], ['firefly', 10], ['buffalo', 10], ['bat2', 10], ['durian', 8]] },
@@ -458,10 +521,12 @@ const ENCOUNTERS = {
                                        ['tortoise3', 4], ['moth3', 4], ['beetle3', 4]] },
   // Doi Mok Yen (stage 6): tea terraces, then the misty pine forest; mostly evolved forms
   route_k: { levels: [24, 27], table: [['gecko2', 14], ['firefly2', 12], ['kite2', 12], ['bat2', 12], ['durian2', 10],
-                                       ['hyacinth2', 10], ['rooster2', 10], ['snail2', 10], ['beetle2', 8]] },
+                                       ['hyacinth2', 10], ['rooster2', 10], ['snail2', 10], ['beetle2', 8],
+                                       ['swallow2', 12], ['squirrel2', 12], ['cloud', 10], ['chime', 10]] },
   route_l: { levels: [26, 30], table: [['moth2', 12], ['kite2', 12], ['tortoise2', 12], ['gecko2', 10], ['firefly2', 10],
                                        ['kingfisher2', 10], ['buffalo2', 10], ['krathong2', 8],
-                                       ['beetle3', 5], ['moth3', 5], ['tortoise3', 5]] },
+                                       ['beetle3', 5], ['moth3', 5], ['tortoise3', 5],
+                                       ['swallow2', 10], ['squirrel2', 10], ['cloud2', 8], ['chime2', 8], ['fox2', 8]] },
   // Ao Dao Thale (stage 7): the four sea monsters, with some evolved forms
   route_m: { levels: [28, 31], table: [['jelly', 16], ['hermit', 16], ['conch', 10], ['dugong', 6], ['crab2', 10],
                                        ['duck2', 10], ['betta2', 10], ['kingfisher2', 8], ['tortoise2', 6], ['narwhal2', 4]] },
