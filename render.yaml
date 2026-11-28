@@ -28,6 +28,13 @@ services:
           property: connectionString
       - key: ALLOWED_ORIGINS
         value: "*"
+      # idea requests ("คำขอพัฒนาเกม"): Render asks for these on the first Blueprint deploy
+      - key: ANTHROPIC_API_KEY         # the AI that checks each idea; without it every idea waits for the owner
+        sync: false
+      - key: ADMIN_USERS               # the game owner's username(s), comma-separated: they allow or turn down ideas
+        sync: false
+      - key: IDEAS_EXPORT_KEY          # optional secret for /api/ideas/queue.json?key=... (the development queue)
+        sync: false
 
 databases:
   - name: pro-monter-db

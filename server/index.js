@@ -19,13 +19,15 @@
 //   POST /api/pvp/result (auth) {opponent, won}-> {rating, delta}
 //   GET  /api/leaderboard?by=pvp               -> fighters by rating
 //   /api/live/...                              live battles (see live.js)
+//   /api/ideas/...                             game idea requests, checked by AI (see ideas.js)
 //   GET  /health                               -> ok
 //
 // "auth" means the header  Authorization: Bearer <token>.
 // With DATABASE_URL set the data lives in Postgres; without it (for trying it out on your own
 // computer) it lives in server/local-data.json.
 // Settings (environment): PORT (default 3000), DATABASE_URL, ALLOWED_ORIGINS (comma-separated,
-// default *), DATABASE_SSL=false to connect to a database without SSL.
+// default *), DATABASE_SSL=false to connect to a database without SSL; for idea requests also
+// ANTHROPIC_API_KEY, ADMIN_USERS and IDEAS_EXPORT_KEY (see ideas.js).
 
 const http = require('http');
 const crypto = require('crypto');
@@ -33,6 +35,7 @@ const fs = require('fs');
 const path = require('path');
 
 const live = require('./live');
+const ideasApi = require('./ideas');
 const PORT = Number(process.env.PORT) || 3000;
 const ORIGINS = (process.env.ALLOWED_ORIGINS || '*').split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_BODY = 512 * 1024;          // a save is a few kilobytes; this leaves plenty of room
@@ -74,6 +77,7 @@ function fileStore(file) {
   const write = () => fs.writeFileSync(file, JSON.stringify(db, null, 1));
   return {
     kind: 'file ' + path.basename(file),
+    ideas: ideasApi.fileIdeas(() => db, write),
     async init() {},
     async userByName(name) { return db.users.find((u) => u.username.toLowerCase() === name.toLowerCase()) || null; },
     async createUser(name, passHash) {
@@ -172,6 +176,7 @@ function pgStore(url) {
                                         : 'stage DESC, caught DESC, level DESC, updated_at ASC';
   return {
     kind: 'postgres',
+    ideas: ideasApi.pgIdeas(q),
     async init() {
       await q(`CREATE TABLE IF NOT EXISTS users (
                  id SERIAL PRIMARY KEY, username TEXT NOT NULL, pass_hash TEXT NOT NULL,
@@ -195,6 +200,7 @@ function pgStore(url) {
                  user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
                  rating INT NOT NULL DEFAULT 1000, wins INT NOT NULL DEFAULT 0, losses INT NOT NULL DEFAULT 0,
                  updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+      await this.ideas.init();
     },
     async userByName(name) {
       const r = await q('SELECT * FROM users WHERE lower(username) = lower($1)', [name]); return r.rows[0] || null;
@@ -372,6 +378,7 @@ async function handle(req, res) {
   const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
 
   if (route === 'GET /health' || route === 'GET /') return send(res, 200, { ok: true, store: store.kind });
+  if (route === 'GET /api/ideas/queue.json') return ideasApi.exportQueue(req, res, { url, send, fail, ideas: store.ideas });
 
   if (route === 'POST /api/register' || route === 'POST /api/login') {
     if (tooManyAttempts(ip)) return fail(res, 429, 'ลองบ่อยเกินไป รอสักครู่แล้วลองใหม่');
@@ -422,7 +429,8 @@ async function handle(req, res) {
   const user = await currentUser(req);
   if (!user) return fail(res, 401, 'กรุณาเข้าสู่ระบบก่อน');
   if (url.pathname.startsWith('/api/live/')) return live.handle(req, res, { url, user, readBody, send, fail });
-  if (route === 'GET /api/me') return send(res, 200, { username: user.username });
+  if (url.pathname.startsWith('/api/ideas')) return ideasApi.handle(req, res, { url, user, readBody, send, fail, ideas: store.ideas });
+  if (route === 'GET /api/me') return send(res, 200, { username: user.username, admin: ideasApi.isAdmin(user) });
   if (route === 'POST /api/logout') {
     await store.dropSession(tokenId((req.headers.authorization || '').split(/\s+/)[1]));
     return send(res, 200, { ok: true });

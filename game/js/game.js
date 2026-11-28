@@ -1335,8 +1335,8 @@
   const STAGE_NAMES = ['ยังไม่ผ่านด่าน', 'ผ่านด่าน 1', 'ผ่านด่าน 2', 'ผ่านด่าน 3', 'ผ่านด่าน 4', 'ผ่านด่าน 5'];
   const whenText = (iso) => { try { return new Date(iso).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return String(iso); } };
   // run a network call with a "connecting" line on screen; returns null after showing the error
-  async function online(fn) {
-    ui.prompt = 'กำลังเชื่อมต่อเซิร์ฟเวอร์...\n(ถ้าเซิร์ฟเวอร์หลับอยู่ อาจใช้เวลาเกือบนาที)';
+  async function online(fn, waitText) {
+    ui.prompt = waitText || 'กำลังเชื่อมต่อเซิร์ฟเวอร์...\n(ถ้าเซิร์ฟเวอร์หลับอยู่ อาจใช้เวลาเกือบนาที)';
     try { return await fn(); }
     catch (e) { ui.prompt = null; await say('ออนไลน์ไม่สำเร็จ: ' + e.message); return null; }
     finally { ui.prompt = null; }
@@ -1426,6 +1426,145 @@
     }
   }
   const save0 = () => save();
+
+  // ---- game idea requests: players send ideas, an AI on the server checks each one.
+  // Ideas that fit go to the development queue, unsuitable ones are turned down, and
+  // anything that changes the game a lot waits for the game's owner to allow it.
+  const IDEA_STATUS = { queued: 'เข้าคิวพัฒนา', pending: 'รอเจ้าของเกมอนุญาต', rejected: 'ไม่พัฒนา', done: 'พัฒนาแล้ว' };
+  const IDEA_COLOR = { queued: '#2f7a3a', pending: '#b5701c', rejected: '#a33a2a', done: '#2f5fa8' };
+  const IDEA_VERDICT = { approve: 'ควรพัฒนา', reject: 'ไม่ควรพัฒนา', ask: 'ต้องให้เจ้าของเกมตัดสินใจ' };
+  const IDEA_SIZE = { small: 'งานเล็ก', medium: 'งานกลาง', large: 'งานใหญ่' };
+
+  // the form for writing an idea (HTML over the game, so phone keyboards work)
+  function askIdea() {
+    const box = document.getElementById('ideaBox');
+    const title = document.getElementById('ideaTitle'), detail = document.getElementById('ideaDetail');
+    const count = document.getElementById('ideaCount');
+    const ok = document.getElementById('ideaOk'), cancel = document.getElementById('ideaCancel');
+    const counter = () => { count.textContent = detail.value.length + '/' + detail.maxLength; };
+    counter(); detail.oninput = counter;
+    box.hidden = false; textOpen = true;
+    setTimeout(() => title.focus(), 30);
+    return new Promise((resolve) => {
+      const done = (v) => {
+        box.hidden = true; textOpen = false; title.blur(); detail.blur();
+        ok.onclick = cancel.onclick = null; box.onkeydown = null;
+        resolve(v);
+      };
+      ok.onclick = () => {
+        const t = title.value.replace(/\s+/g, ' ').trim();
+        if (t.length < 4) { title.focus(); title.placeholder = 'ใส่หัวข้ออย่างน้อย 4 ตัวอักษร'; title.value = t; return; }
+        const v = { title: t, detail: detail.value.trim() };
+        title.value = ''; detail.value = '';           // a sent idea is not left in the form
+        done(v);
+      };
+      cancel.onclick = () => done(null);              // a cancelled one is, to finish later
+      box.onkeydown = (ev) => {
+        ev.stopPropagation();
+        if (ev.key === 'Enter' && ev.target === title) { ev.preventDefault(); detail.focus(); }
+        if (ev.key === 'Escape') done(null);
+      };
+    });
+  }
+
+  // everything about one idea, as a message
+  function ideaText(x, forOwner) {
+    const lines = ['"' + x.title + '"  โดย ' + x.username];
+    if (x.detail) lines.push(x.detail);
+    lines.push('สถานะ : ' + IDEA_STATUS[x.status] + (x.decided_by && x.decided_by !== 'AI' && x.status !== 'pending' ? ' (ตัดสินโดยเจ้าของเกม)' : ''));
+    lines.push((x.ai_by === 'ai' ? 'AI ตรวจแล้ว : ' + IDEA_VERDICT[x.ai_verdict] : 'ตรวจเบื้องต้น : ' + IDEA_VERDICT[x.ai_verdict])
+      + (x.size ? ' · ' + (IDEA_SIZE[x.size] || x.size) : '') + '\n' + (x.ai_reason || ''));
+    if (forOwner && x.owner_question) lines.push('เรื่องที่ต้องตัดสินใจ : ' + x.owner_question);
+    if (x.owner_note) lines.push('ข้อความจากเจ้าของเกม : ' + x.owner_note);
+    return lines.join('\n');
+  }
+
+  // pick an idea from a list, five per page; returns its index or -1
+  async function pickIdea(list, title, empty) {
+    if (!list.length) { await say(empty); return -1; }
+    const PER = 5, pages = Math.ceil(list.length / PER);
+    let page = 0;
+    for (;;) {
+      const part = list.slice(page * PER, page * PER + PER);
+      const opts = part.map((x) => ({ label: x.title, right: IDEA_STATUS[x.status],
+        sub: (x.summary && x.summary !== x.title ? x.summary : x.ai_reason) || '', subColor: IDEA_COLOR[x.status] }));
+      if (pages > 1) opts.push({ label: '◀ หน้าก่อน', disabled: page === 0 }, { label: 'หน้าถัดไป ▶', disabled: page === pages - 1 });
+      const i = await choose(opts, { x: 30, y: 10, w: 420, rowH: 34, cancellable: true, title,
+        footer: (pages > 1 ? 'หน้า ' + (page + 1) + ' / ' + pages + '   ' : '') + 'ทั้งหมด ' + list.length + ' ไอเดีย' });
+      if (i < 0) return -1;
+      if (i === part.length) { page--; continue; }
+      if (i === part.length + 1) { page++; continue; }
+      return page * PER + i;
+    }
+  }
+
+  async function sendIdea() {
+    const v = await askIdea();
+    if (!v) return;
+    const r = await online(() => ONLINE.ideaSend(v.title, v.detail), 'AI กำลังตรวจไอเดียของคุณ...\n(อาจใช้เวลาสักครู่)');
+    if (!r) return;
+    const x = r.idea;
+    AUDIO.sfx(x.status === 'rejected' ? 'cancel' : 'caught');
+    const head = x.ai_by === 'ai' ? 'AI ตรวจไอเดีย "' + x.title + '" แล้ว\nผล : ' + IDEA_VERDICT[x.ai_verdict]
+                                  : 'ได้รับไอเดีย "' + x.title + '" แล้ว';
+    const next = x.status === 'queued' ? 'ไอเดียนี้เข้าคิวพัฒนาแล้ว ขอบคุณมาก!'
+               : x.status === 'pending' ? 'ไอเดียนี้จะรอเจ้าของเกมอนุญาตก่อนจึงจะพัฒนา\nดูผลได้ที่ "ไอเดียของฉัน"'
+               : 'ไอเดียนี้จะไม่ถูกพัฒนา ลองส่งไอเดียอื่นได้นะ';
+    await say(head + '\n' + (x.ai_reason || '') + '\n' + next);
+  }
+
+  // the owner's screen: ideas waiting to be allowed, then the development queue
+  async function reviewIdeas() {
+    for (;;) {
+      const data = await online(() => ONLINE.ideaReview());
+      if (!data) return;
+      const k = await choose(['รออนุญาต (' + data.pending.length + ')', 'คิวพัฒนา (' + data.queued.length + ')', 'กลับ'],
+        { x: 130, y: 90, w: 220, rowH: 26, cancellable: true, title: 'ตรวจคำขอ (เจ้าของเกม)',
+          footer: 'AI ส่งไอเดียที่ต้องตัดสินใจมาให้ที่นี่' });
+      if (k < 0 || k === 2) return;
+      const list = k === 0 ? data.pending : data.queued;
+      const i = await pickIdea(list, k === 0 ? 'ไอเดียที่รอเจ้าของเกมอนุญาต' : 'คิวพัฒนา',
+        k === 0 ? 'ไม่มีไอเดียที่รออนุญาต' : 'คิวพัฒนายังว่างอยู่');
+      if (i < 0) continue;
+      const x = list[i];
+      await say(ideaText(x, true));
+      const acts = k === 0 ? [['อนุญาตให้พัฒนา', 'approve'], ['ไม่อนุญาต', 'reject'], ['ไว้ก่อน', null]]
+                           : [['พัฒนาเสร็จแล้ว', 'done'], ['ยกเลิก ไม่พัฒนา', 'reject'], ['ไว้ก่อน', null]];
+      const a = await choose(acts.map((y) => y[0]), { x: 110, y: 120, w: 260, rowH: 26, cancellable: true, title: x.title });
+      if (a < 0 || !acts[a][1]) continue;
+      const note = await askText('ข้อความถึงผู้เล่น (ไม่ใส่ก็ได้)', '', 100, 'ผู้เล่นจะเห็นข้อความนี้ในไอเดียของเขา');
+      if (note === null) continue;
+      const done = await online(() => ONLINE.ideaDecide(x.id, acts[a][1], note));
+      if (done) await say('"' + x.title + '"\nสถานะใหม่ : ' + IDEA_STATUS[done.idea.status]);
+    }
+  }
+
+  async function ideasMenu() {
+    if (!ONLINE.loggedIn) {
+      await say('ต้องเข้าสู่ระบบก่อนจึงจะส่งไอเดียได้');
+      if (!(await ONLINE.form())) return;
+      await say('เข้าสู่ระบบแล้ว สวัสดี ' + ONLINE.username + '!');
+    }
+    const me = await online(() => ONLINE.me());
+    if (!me) return;
+    let at = 0;
+    for (;;) {
+      const opts = ['ส่งไอเดียใหม่', 'ไอเดียของฉัน', 'ไอเดียที่จะได้พัฒนา'].concat(me.admin ? ['ตรวจคำขอ (เจ้าของเกม)'] : [], ['กลับ']);
+      const i = await choose(opts, { x: 120, y: 70, w: 240, rowH: 28, cancellable: true, start: at,
+        title: 'คำขอพัฒนาเกม', footer: 'AI ตรวจทุกไอเดีย · ไอเดียใหญ่รอเจ้าของเกมอนุญาต' });
+      const what = i < 0 ? 'กลับ' : opts[i];
+      at = Math.max(0, i);
+      if (what === 'กลับ') return;
+      if (what === 'ส่งไอเดียใหม่') { await sendIdea(); continue; }
+      if (what === 'ตรวจคำขอ (เจ้าของเกม)') { await reviewIdeas(); continue; }
+      const mine = what === 'ไอเดียของฉัน';
+      const data = await online(() => mine ? ONLINE.ideaMine() : ONLINE.ideaBoard());
+      if (!data) continue;
+      const k = await pickIdea(data.ideas, mine ? 'ไอเดียของ' + ONLINE.username : 'ไอเดียที่จะได้พัฒนา',
+        mine ? 'คุณยังไม่ได้ส่งไอเดีย ลองเลือก "ส่งไอเดียใหม่"' : 'ยังไม่มีไอเดียในคิวพัฒนา มาเป็นคนแรกกัน!');
+      if (k >= 0) await say(ideaText(data.ideas[k], false));
+    }
+  }
 
   // ---- trading monsters online, with a code: put one up (it waits on the server), a friend
   // enters the code and gives one back, then the first player collects it.
@@ -1799,7 +1938,7 @@
     for (;;) {
       const opts = G.party.map((m) => ({
         label: nm(m) + ' ' + rarityOf(m.sp).stars + '  Lv.' + m.level, badge: SPECIES[m.sp].type, hp: [m.hp, stats(m).hp] }));
-      opts.push({ label: 'เมนูอื่น ๆ', sub: 'ตารางแพ้ธาตุ · ออนไลน์ / อันดับ · เปลี่ยนชื่อ' });
+      opts.push({ label: 'เมนูอื่น ๆ', sub: 'ตารางแพ้ธาตุ · ออนไลน์ / อันดับ · คำขอพัฒนาเกม · เปลี่ยนชื่อ' });
       const i = await choose(opts, {
         x: 50, y: 24, w: 380, rowH: 30, cancellable: true, start: at,
         title: G.party.length ? 'ทีมของ' + (G.name || DEFAULT_NAME) + '  (เลือกเพื่อดูข้อมูล)' : 'ยังไม่มีมอนสเตอร์ในทีม',
@@ -1809,7 +1948,7 @@
       at = i;
       if (i === G.party.length) {          // more: the type table, online, renaming
         const k = await choose(['ดูตารางแพ้ธาตุ', ONLINE.loggedIn ? 'ออนไลน์ / อันดับ (' + ONLINE.username + ')' : 'ออนไลน์ / อันดับ',
-          'เปลี่ยนชื่อตัวละคร', G.flags.hideGoal ? 'แสดงเป้าหมายบนจอ' : 'ซ่อนเป้าหมายบนจอ', 'กลับ'],
+          'เปลี่ยนชื่อตัวละคร', G.flags.hideGoal ? 'แสดงเป้าหมายบนจอ' : 'ซ่อนเป้าหมายบนจอ', 'คำขอพัฒนาเกม', 'กลับ'],
           { x: 130, y: 80, w: 220, rowH: 26, cancellable: true, title: 'เมนูอื่น ๆ' });
         if (k === 0) { ui.chart = true; await anyKey(); ui.chart = false; }
         else if (k === 1) await onlineMenu(false);
@@ -1819,6 +1958,7 @@
           const q = questNow();
           await say(G.flags.hideGoal ? 'ซ่อนเป้าหมายแล้ว' : 'เป้าหมายตอนนี้ : ' + (q ? q.text : ''));
         }
+        else if (k === 4) await ideasMenu();
         continue;
       }
       const m = G.party[i];
@@ -2851,11 +2991,12 @@
     for (;;) {
       const saved = loadSave();
       const opts = (saved ? ['เล่นต่อ', 'เริ่มเกมใหม่'] : ['เริ่มเกมใหม่'])
-        .concat([ONLINE.loggedIn ? 'ออนไลน์ (' + ONLINE.username + ')' : 'ออนไลน์ / เซฟคลาวด์', 'ตารางอันดับ']);
+        .concat([ONLINE.loggedIn ? 'ออนไลน์ (' + ONLINE.username + ')' : 'ออนไลน์ / เซฟคลาวด์', 'ตารางอันดับ', 'คำขอพัฒนาเกม']);
       const h = opts.length * 22 + 14;
       const i = await choose(opts, { x: 145, y: 312 - h, w: 190, rowH: 22 });
       const what = opts[i];
       if (what === 'ตารางอันดับ') { await leaderboardScreen(); continue; }
+      if (what === 'คำขอพัฒนาเกม') { await ideasMenu(); continue; }
       if (what.startsWith('ออนไลน์')) {
         const cloud = await onlineMenu(true);
         if (cloud) { start = cloud; break; }
@@ -3103,7 +3244,7 @@
     bot.cool -= dt;
     if (bot.cool > 0) return;
     bot.cool = 0.12;
-    if (textOpen) { document.getElementById('nameOk').click(); return; }
+    if (textOpen) { document.getElementById(document.getElementById('ideaBox').hidden ? 'nameOk' : 'ideaCancel').click(); return; }
     if (ui.wait) { press('ok', false); return; }
     if (ui.menu) {
       const m = ui.menu, i = botMenuPick(m);

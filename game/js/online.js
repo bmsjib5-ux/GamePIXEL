@@ -131,6 +131,13 @@ const ONLINE = (() => {
     tradeAccept: (code, mon) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/accept', { mon }),
     tradeCancel: (code) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/cancel'),
     tradeClaim: (code) => call('POST', '/api/trades/' + encodeURIComponent(code) + '/claim'),
+    // game idea requests (checked by AI; the owner decides the rest)
+    me: () => call('GET', '/api/me'),
+    ideaSend: (title, detail) => call('POST', '/api/ideas', { title, detail }, 90000),
+    ideaMine: () => call('GET', '/api/ideas/mine'),
+    ideaBoard: () => call('GET', '/api/ideas/board'),
+    ideaReview: () => call('GET', '/api/ideas/review'),
+    ideaDecide: (id, decision, note) => call('POST', '/api/ideas/' + id + '/decide', { decision, note }),
   };
   return api;
 })();

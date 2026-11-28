@@ -62,24 +62,29 @@
   #btnA { right: 0; top: 14px; background: rgba(224, 86, 47, 0.45); }
   #btnB { left: 0; bottom: 0; background: rgba(47, 134, 224, 0.40); }
   #btns button.down { background: rgba(255, 216, 102, 0.75); color: #2b2420; }
-  #authBox, #nameBox { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+  #authBox, #nameBox, #ideaBox { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
              background: rgba(10, 12, 18, 0.6); }
-  #authBox[hidden], #nameBox[hidden] { display: none; }
-  #authBox form, #nameBox form { width: min(340px, calc(100vw - 32px)); background: #fbf6e6; color: #2b2420; border-radius: 10px;
+  #authBox[hidden], #nameBox[hidden], #ideaBox[hidden] { display: none; }
+  #authBox form, #nameBox form, #ideaBox form { width: min(340px, calc(100vw - 32px)); background: #fbf6e6; color: #2b2420; border-radius: 10px;
                   border: 3px solid #5a5048; padding: 16px 18px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
                   font: 15px "Leelawadee UI", "Noto Sans Thai", Tahoma, sans-serif; }
-  #authBox h2, #nameBox h2 { font-size: 17px; margin: 0 0 12px; }
+  #authBox h2, #nameBox h2, #ideaBox h2 { font-size: 17px; margin: 0 0 12px; }
   #authBox label { display: block; margin: 8px 0; font-size: 14px; }
-  #authBox input, #nameBox input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px 10px;
+  #authBox input, #nameBox input, #ideaBox input, #ideaBox textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px 10px;
                    font: inherit; font-size: 16px; border: 2px solid #b8ab8c; border-radius: 6px; background: #fff; }
   #nameBox .hint { font-size: 12px; color: #8a8478; margin: 6px 0 10px; }
-  #authBox input:focus, #nameBox input:focus { outline: none; border-color: #e0782f; }
+  #authBox input:focus, #nameBox input:focus, #ideaBox input:focus, #ideaBox textarea:focus { outline: none; border-color: #e0782f; }
   #authNote { min-height: 20px; margin: 8px 0; font-size: 13px; }
-  #authBox .row, #nameBox .row { display: flex; gap: 8px; flex-wrap: wrap; }
-  #authBox button, #nameBox button { flex: 1; padding: 9px 6px; font: inherit; font-size: 14px; font-weight: 600; border-radius: 6px;
+  #authBox .row, #nameBox .row, #ideaBox .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  #authBox button, #nameBox button, #ideaBox button { flex: 1; padding: 9px 6px; font: inherit; font-size: 14px; font-weight: 600; border-radius: 6px;
                     border: 2px solid #8a5a2a; background: #e0782f; color: #fff; cursor: pointer; }
-  #authBox button.ghost, #nameBox button.ghost { background: transparent; color: #5a5048; border-color: #b8ab8c; }
+  #authBox button.ghost, #nameBox button.ghost, #ideaBox button.ghost { background: transparent; color: #5a5048; border-color: #b8ab8c; }
   #authBox button:disabled { opacity: 0.6; cursor: wait; }
+  #ideaBox form { width: min(420px, calc(100vw - 32px)); }
+  #ideaBox label { display: block; margin: 8px 0; font-size: 14px; }
+  #ideaBox textarea { resize: vertical; min-height: 110px; max-height: 40vh; line-height: 1.45; }
+  #ideaBox .hint { font-size: 12px; color: #8a8478; margin: 6px 0 10px; }
+  #ideaCount { float: right; color: #8a8478; font-size: 12px; }
   #btnSound { position: fixed; z-index: 6; top: calc(8px + env(safe-area-inset-top, 0px));
               left: calc(8px + env(safe-area-inset-left, 0px)); width: 38px; height: 38px; padding: 0;
               font-size: 18px; border-radius: 8px; color: #fff; cursor: pointer;
@@ -138,6 +143,20 @@
     </div>
   </form>
 </div>
+<!-- writing a game idea request (shown by askIdea in js/game.js) -->
+<div id="ideaBox" hidden>
+  <form onsubmit="return false">
+    <h2>ส่งไอเดียพัฒนาเกม</h2>
+    <label>หัวข้อ <input id="ideaTitle" maxlength="60" autocomplete="off" placeholder="เช่น มอนสเตอร์ธาตุน้ำแข็งบนดอย"></label>
+    <label>รายละเอียด <span id="ideaCount">0/600</span>
+      <textarea id="ideaDetail" maxlength="600" placeholder="อยากให้มีอะไร ทำงานอย่างไร ทำไมถึงสนุก"></textarea></label>
+    <p class="hint">AI จะตรวจไอเดียก่อน: ไอเดียที่เข้ากับเกมจะเข้าคิวพัฒนา ไอเดียที่เปลี่ยนเกมมากจะรอเจ้าของเกมอนุญาต</p>
+    <div class="row">
+      <button id="ideaOk" type="button">ส่งไอเดีย</button>
+      <button id="ideaCancel" type="button" class="ghost">ยกเลิก</button>
+    </div>
+  </form>
+</div>
 <!-- sound on / off (key M) -->
 <button id="btnSound" type="button" aria-label="เปิดหรือปิดเสียง">🔊</button>
 <!-- install the game as an app: shown on Windows when Edge / Chrome offers it -->
@@ -145,11 +164,11 @@
 <!-- auto-play bot for testing: off -> x1 -> x4 (key P) -->
 <button id="btnBot" type="button" hidden aria-label="บอทเล่นอัตโนมัติ" title="บอทเล่นอัตโนมัติ (ปุ่ม P)">บอท</button>
 <!-- raise ?v= whenever these files change, so browsers do not keep an old copy -->
-<script src="js/tiles.js?v=53"></script>
-<script src="js/data.js?v=53"></script>
-<script src="js/map.js?v=53"></script>
-<script src="js/audio.js?v=53"></script>
-<script src="js/online.js?v=53"></script>
-<script src="js/game.js?v=53"></script>
+<script src="js/tiles.js?v=54"></script>
+<script src="js/data.js?v=54"></script>
+<script src="js/map.js?v=54"></script>
+<script src="js/audio.js?v=54"></script>
+<script src="js/online.js?v=54"></script>
+<script src="js/game.js?v=54"></script>
 </body>
 </html>
